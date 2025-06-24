@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Fleet Service Manager - ECS Fargate Deployment
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC to deploy into
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for ECS tasks
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Postgres DB password
+
+Resources:
+  ServiceManagerCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: fleet-service-manager-cluster
+
+  ServiceManagerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  ServiceManagerSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: fleet-service-manager-secrets
+      Description: Secrets for Fleet Service Manager
+      SecretString: !Sub |
+        {
+          "POSTGRES_DB": "servicemgr_db",
+          "POSTGRES_USER": "servicemgr_user",
+          "POSTGRES_PASSWORD": "${DBPassword}"
+        }
+
+  ServiceManagerTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: fleet-service-manager-task
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ServiceManagerTaskRole.Arn
+      ContainerDefinitions:
+        - Name: db_servicemgr
+          Image: postgres:15
+          Essential: true
+          Environment:
+            - Name: POSTGRES_DB
+              ValueFrom:
+                SecretKeyRef:
+                  Name: !Ref ServiceManagerSecrets
+                  Key: POSTGRES_DB
+            - Name: POSTGRES_USER
+              ValueFrom:
+                SecretKeyRef:
+                  Name: !Ref ServiceManagerSecrets
+                  Key: POSTGRES_USER
+            - Name: POSTGRES_PASSWORD
+              ValueFrom:
+                SecretKeyRef:
+                  Name: !Ref ServiceManagerSecrets
+                  Key: POSTGRES_PASSWORD
+          PortMappings:
+            - ContainerPort: 5432
+        - Name: service_manager
+          Image: <your-ecr-repo-url>:latest
+          Essential: true
+          Environment:
+            - Name: DATABASE_URL
+              Value: postgresql://servicemgr_user:${DBPassword}@db_servicemgr:5432/servicemgr_db
+          PortMappings:
+            - ContainerPort: 8100
+          DependsOn:
+            - db_servicemgr
+          Secrets:
+            - Name: POSTGRES_DB
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ServiceManagerSecrets}:POSTGRES_DB:: 
+            - Name: POSTGRES_USER
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ServiceManagerSecrets}:POSTGRES_USER:: 
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ServiceManagerSecrets}:POSTGRES_PASSWORD:: 
+
+  ServiceManagerService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ServiceManagerCluster
+      DesiredCount: 1
+      LaunchType: FARGATE
+      TaskDefinition: !Ref ServiceManagerTaskDef
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref Subnets
+          SecurityGroups: []
+      ServiceName: fleet-service-manager
+
+  ServiceManagerALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: fleet-service-manager-alb
+      Subnets: !Ref Subnets
+      Scheme: internet-facing
+      Type: application
+
+  ServiceManagerALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ServiceManagerALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ServiceManagerTargetGroup
+
+  ServiceManagerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 8100
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckPath: /health
+      Matcher:
+        HttpCode: 200
+
+Outputs:
+  ALBEndpoint:
+    Description: Application Load Balancer endpoint
+    Value: !GetAtt ServiceManagerALB.DNSName
