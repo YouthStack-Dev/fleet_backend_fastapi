@@ -1,60 +1,44 @@
-# from fastapi import APIRouter, Depends, HTTPException
-# from sqlalchemy.orm import Session
-# from app.database.database import get_db
-# from app.api.schemas.schemas import TenantCreate, TenantRead, CompanyCreate, CompanyRead
-# from app.api.routes.auth import token_dependency
-# from app.controller.tenant_controller import TenantController
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database.database import get_db
 
-# router = APIRouter()
-# tenant_controller = TenantController()
+router = APIRouter()
 
-# @router.post("/", response_model=TenantRead)
-# def create_tenant(
-#     tenant: TenantCreate,
-#     token: token_dependency,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.create_tenant(tenant, db)
 
-# @router.get("/", response_model=list[TenantRead])
-# def get_tenants(
-#     token: token_dependency,
-#     skip: int = 0,
-#     limit: int = 100,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.get_tenants(db, skip=skip, limit=limit)
 
-# @router.get("/{tenant_id}", response_model=TenantRead)
-# def get_tenant(
-#     tenant_id: int,
-#     token: token_dependency,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.get_tenant(tenant_id, db)
+@router.post("/create/")
+def add_driver():
+    """Endpoint to create a new driver."""
+    pass
+@router.get("/get/{driver_id}")
+def get_driver(driver_id: int, db: Session = Depends(get_db)):
+    pass
 
-# @router.put("/{tenant_id}", response_model=TenantRead)
-# def update_tenant(
-#     tenant_id: int,
-#     tenant_update: TenantCreate,
-#     token: token_dependency,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.update_tenant(tenant_id, tenant_update, db)
+@router.get("/get_all/")
+def get_all_drivers(db: Session = Depends(get_db)):
+    pass
 
-# @router.patch("/{tenant_id}", response_model=TenantRead)
-# def patch_tenant(
-#     tenant_id: int,
-#     tenant_update: dict,
-#     token: token_dependency,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.patch_tenant(tenant_id, tenant_update, db)
+@router.delete("/delete/{driver_id}")
+def delete_driver(driver_id: int, db: Session = Depends(get_db)):
+    pass
 
-# @router.delete("/{tenant_id}", response_model=TenantRead)
-# def delete_tenant(
-#     tenant_id: int,
-#     token: token_dependency,
-#     db: Session = Depends(get_db)
-# ):
-#     return tenant_controller.delete_tenant(tenant_id, db)
+@router.put("/update/{driver_id}")
+def update_driver(driver_id: int, db: Session = Depends(get_db)):
+    pass
+
+@router.delete("/bulk_delete/")
+def bulk_delete_driver(driver_ids: list[int], db: Session = Depends(get_db)):
+    pass
+
+@router.get("/search/")
+def search_drivers(query: str, db: Session = Depends(get_db)):
+    pass
+
+@router.get("/count/")
+def count_drivers(db: Session = Depends(get_db)):
+    pass
+
+@router.post("/bulk_create/")
+def bulk_create_drivers( db: Session = Depends(get_db)):
+    pass
+    
