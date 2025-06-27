@@ -7,9 +7,9 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  REPO_NAME: fleet-service-manager
+  REPO_NAME: fleet-service_manager
   IMAGE_TAG: latest
-  STACK_NAME: fleet-service-manager
+  STACK_NAME: fleet-service_manager
 
 jobs:
   deploy:
@@ -40,11 +40,18 @@ jobs:
           aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION || \
           aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
 
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
+
       - name: Build, tag, and push Docker image
         run: |
+          docker-compose build
+          IMAGE_NAME=$(docker-compose config | grep 'image:' | awk '{print $2}')
           IMAGE_URI=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO_NAME:$IMAGE_TAG
-          docker build -t $REPO_NAME .
-          docker tag $REPO_NAME:latest $IMAGE_URI
+          docker tag $IMAGE_NAME $IMAGE_URI
           docker push $IMAGE_URI
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
