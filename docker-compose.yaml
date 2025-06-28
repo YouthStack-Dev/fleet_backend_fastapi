@@ -25,6 +25,18 @@ services:
       - "8100:8100"
     volumes:
       - ./service_manager:/app
+  booking_management:
+    build:
+      context: ./booking_management
+    container_name: booking_management
+    environment:
+      - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
+    depends_on:
+      - db_servicemgr
+    ports:
+      - "8102:8100"
+    volumes:
+      - ./booking_management:/app
   vendor_management:
     build:
       context: ./vendor_management
