@@ -41,4 +41,3 @@ def count_vehicles(db: Session = Depends(get_db)):
 @router.post("/bulk_create/")
 def bulk_create_vehicles(db: Session = Depends(get_db)):
     pass
-    
