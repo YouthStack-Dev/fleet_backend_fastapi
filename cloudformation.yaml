@@ -12,6 +12,9 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Postgres DB password
+  ECRImageUrl:
+    Type: String
+    Description: ECR image URI for the service_manager container (e.g. <account-id>.dkr.ecr.<region>.amazonaws.com/repo:tag)
 
 Resources:
   ServiceManagerCluster:
@@ -57,28 +60,19 @@ Resources:
           Essential: true
           Environment:
             - Name: POSTGRES_DB
-              ValueFrom:
-                SecretKeyRef:
-                  Name: !Ref ServiceManagerSecrets
-                  Key: POSTGRES_DB
+              Value: servicemgr_db
             - Name: POSTGRES_USER
-              ValueFrom:
-                SecretKeyRef:
-                  Name: !Ref ServiceManagerSecrets
-                  Key: POSTGRES_USER
+              Value: servicemgr_user
             - Name: POSTGRES_PASSWORD
-              ValueFrom:
-                SecretKeyRef:
-                  Name: !Ref ServiceManagerSecrets
-                  Key: POSTGRES_PASSWORD
+              Value: !Ref DBPassword
           PortMappings:
             - ContainerPort: 5432
         - Name: service_manager
-          Image: <your-ecr-repo-url>:latest
+          Image: !Ref ECRImageUrl
           Essential: true
           Environment:
             - Name: DATABASE_URL
-              Value: postgresql://servicemgr_user:${DBPassword}@db_servicemgr:5432/servicemgr_db
+              Value: !Sub "postgresql://servicemgr_user:${DBPassword}@db_servicemgr:5432/servicemgr_db"
           PortMappings:
             - ContainerPort: 8100
           DependsOn:
