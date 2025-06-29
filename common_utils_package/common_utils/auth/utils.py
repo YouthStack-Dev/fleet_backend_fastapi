@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import hashlib
 from typing import Optional, Dict, List
 import jwt
 from fastapi import HTTPException, status
@@ -62,3 +63,10 @@ def verify_token(token: str) -> Dict:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+def verify_password(plain_password: str, hashed_password: str):
+    # Replace with actual password hashing in production
+    return plain_password == hashed_password
