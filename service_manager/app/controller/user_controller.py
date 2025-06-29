@@ -8,10 +8,9 @@ class UserController:
     def create_user(self, user: UserCreate, db: Session):
         try:
             return crud.create_user(db, user)
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(status_code=409, detail="Username or email already exists")
-
+        except Exception as e:
+            raise e
+        
     def get_users(self, db: Session, skip: int = 0, limit: int = 100):
         return crud.get_users(db, skip=skip, limit=limit)
 
