@@ -19,7 +19,7 @@ class JWTAuthMiddleware(HTTPBearer):
             # Verify token and get user data
             payload = verify_token(credentials.credentials)
             request.state.user = payload
-            return credentials.credentials
+            return payload, credentials.credentials
         except HTTPException as e:
             # If token verification fails, raise HTTPException
             raise e
