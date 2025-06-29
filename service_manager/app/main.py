@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
     # Create models
     init_db()
     
-    # seed_data()
+    seed_data()
     yield
 
 
