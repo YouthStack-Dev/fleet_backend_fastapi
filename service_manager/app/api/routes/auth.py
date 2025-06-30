@@ -6,7 +6,7 @@ import jwt
 from app.database.database import get_db   
 from app.api.schemas.schemas import TokenResponse
 from app.crud import crud
-from common_utils.auth.utils import create_access_token, hash_password
+from common_utils.auth.utils import create_access_token, hash_password , verify_password
 from common_utils.auth.permission_checker import PermissionChecker
 
 router = APIRouter()
@@ -17,7 +17,7 @@ def authenticate_user(db: Session, username: str, password: str):
         print(f"User {username} not found")
         return None
     # Verify the hashed password
-    if not crud.verify_password(hash_password(password), user.hashed_password):
+    if not verify_password(hash_password(password), user.hashed_password):
         print(f"Password for user {username} is incorrect")
         return None
     return user

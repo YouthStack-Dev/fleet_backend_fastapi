@@ -65,21 +65,25 @@ def seed_data():
 
             # Create Modules
             modules = [
-                Module(service_id=services[0].id, name="Vehicle Management", description="Manage vehicle inventory"),
-                Module(service_id=services[0].id, name="Maintenance", description="Vehicle maintenance tracking"),
-                Module(service_id=services[1].id, name="Reservations", description="Handle vehicle reservations"),
-                Module(service_id=services[2].id, name="Reports", description="Generate analytics reports")
+                Module(service_id=services[0].id, name="user_management", description="Manage user accounts"),
+                Module(service_id=services[0].id, name="group_management", description="Manage user groups"),
+                Module(service_id=services[0].id, name="mapping_management", description="Vehicle maintenance tracking"),
+                Module(service_id=services[0].id, name="policy_management", description="Handle vehicle reservations"),
+                Module(service_id=services[0].id, name="service_management", description="Generate analytics reports"),
+                Module(service_id=services[0].id, name="tenant_management", description="Generate analytics reports")
             ]
             session.add_all(modules)
             session.flush()
 
             # Create Users with different roles
             users = [
-                User(username="admin", email="admin@acme.com", hashed_password="hashed_adminpass", 
+                User(username="admin", email="admin@acme.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
+                     
                      tenant_id=tenants[0].tenant_id, is_active=1),
-                User(username="manager", email="manager@startup.com", hashed_password="hashed_managerpass", 
+                    
+                User(username="manager", email="manager@startup.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[1].tenant_id, is_active=1),
-                User(username="driver", email="driver@medsol.com", hashed_password="hashed_driverpass", 
+                User(username="driver", email="driver@medsol.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[2].tenant_id, is_active=1)
             ]
             session.add_all(users)
@@ -111,6 +115,24 @@ def seed_data():
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[0].id,
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[1].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[2].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[3].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[4].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[5].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                # Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[6].id,
+                #       can_view=True, can_create=True, can_edit=True, can_delete=True,
+                #       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
                 Policy(tenant_id=tenants[1].tenant_id, service_id=services[1].id, module_id=modules[2].id,
                       can_view=True, can_create=True, can_edit=False, can_delete=False,
                       role_id=roles[1].role_id),
