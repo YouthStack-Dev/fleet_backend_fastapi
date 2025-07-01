@@ -19,15 +19,6 @@ async def create_tenant(
     except HTTPException as e:
         raise e
 
-@router.get("/", response_model=list[TenantRead])
-async def get_tenants(
-    db: Session = Depends(get_db),
-    token_data: dict = Depends(PermissionChecker(["tenant_management.read"])),
-    skip: int = 0,
-    limit: int = 100
-):
-    return tenant_controller.get_tenants(db, skip=skip, limit=limit)
-
 @router.get("/{tenant_id}", response_model=TenantRead)
 async def get_tenant(
     tenant_id: int,
@@ -38,6 +29,15 @@ async def get_tenant(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return tenant
+@router.get("/", response_model=list[TenantRead])
+async def get_tenants(
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["tenant_management.read"])),
+    skip: int = 0,
+    limit: int = 100
+):
+    return tenant_controller.get_tenants(db, skip=skip, limit=limit)
+
 
 @router.put("/{tenant_id}", response_model=TenantRead)
 async def update_tenant(
