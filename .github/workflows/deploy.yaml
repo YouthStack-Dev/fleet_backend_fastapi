@@ -7,9 +7,11 @@ on:
 
 env:
   AWS_REGION: ap-south-1
+
   REPO_NAME: fleet
+
   IMAGE_TAG: latest
-  STACK_NAME: fleet-service-manager
+  STACK_NAME: fleet-service_manager
 
 jobs:
   deploy:
@@ -68,10 +70,17 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose version
 
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
+
       - name: Build, tag, and push Docker image
         env:
           ECR_REGISTRY: ${{ env.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
         run: |
+
           # Build and tag in one step
           docker compose build service_manager
           
@@ -87,6 +96,7 @@ jobs:
           }
           
           echo "IMAGE_URI=${REPOSITORY_URI}:${IMAGE_TAG}" >> $GITHUB_ENV
+
 
       - name: Deploy CloudFormation stack
         run: |
