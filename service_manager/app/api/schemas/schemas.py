@@ -46,6 +46,42 @@ class GroupRead(GroupCreate):
     class Config:
         from_attributes = True
 
+class DepartmentBase(BaseModel):
+    tenant_id: int
+    department_name: str
+    description: Optional[str]
+
+
+class DepartmentCreate(DepartmentBase):
+    pass
+
+
+class DepartmentUpdate(BaseModel):
+    department_name: Optional[str]
+    description: Optional[str]
+
+
+class DepartmentOut(DepartmentBase):
+    department_id: int
+
+    class Config:
+        from_attributes = True
+
+class EmployeeCreate(BaseModel):
+    user_id: int
+    employee_name: str
+    gender: Optional[str]
+    mobile_number: Optional[str]
+    alternate_mobile_number: Optional[str]
+    office: Optional[str]
+    special_need: Optional[str]
+    subscribe_via_email: Optional[bool] = False
+    subscribe_via_sms: Optional[bool] = False
+    address: Optional[str]
+    latitude: Optional[str]
+    longitude: Optional[str]
+    landmark: Optional[str]
+
 class RoleCreate(BaseModel):
     role_name: str
     description: Optional[str] = None

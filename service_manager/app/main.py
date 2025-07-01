@@ -7,6 +7,7 @@ from app.api.routes.policies import router as policy_router
 from app.api.routes.users import router as user_router
 from app.api.routes.mappings import router as mappings_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.department import router as department_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
 
@@ -15,7 +16,7 @@ async def lifespan(app: FastAPI):
     # Create models
     init_db()
     
-    seed_data()
+    # seed_data()
     yield
 
 
@@ -24,6 +25,7 @@ app = FastAPI(title="Service Manager", lifespan=lifespan)
 
 
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
+app.include_router(department_router, prefix="/api/departments", tags=["departments"])
 app.include_router(service_router, prefix="/api/services", tags=["services"])
 app.include_router(group_router, prefix="/api/groups", tags=["groups"])
 app.include_router(policy_router, prefix="/api/policies", tags=["policies"])

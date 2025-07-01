@@ -40,6 +40,15 @@ user_role = Table(
     UniqueConstraint('user_id', 'role_id', 'tenant_id', name='uix_user_role')
 )
 
+
+user_department = Table(
+    'user_department',
+    Base.metadata,
+    Column('user_id', ForeignKey('users.user_id'), primary_key=True),
+    Column('department_id', ForeignKey('departments.department_id'), primary_key=True),
+    UniqueConstraint('user_id', name='uix_user_department')
+)
+
 class Tenant(Base, TimestampMixin):
     __tablename__ = 'tenants'
     tenant_id = Column(Integer, primary_key=True)
@@ -65,6 +74,45 @@ class User(Base, TimestampMixin):
     tenants = relationship("Tenant", secondary=user_tenant, back_populates="users")
     groups = relationship("Group", secondary=group_user, back_populates="users")
     roles = relationship("Role", secondary=user_role, back_populates="users")
+    employee = relationship("Employee", back_populates="user", uselist=False)
+    departments = relationship("Department", secondary=user_department, back_populates="users")
+
+class Department(Base, TimestampMixin):
+    __tablename__ = 'departments'
+
+    department_id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey('tenants.tenant_id'), nullable=False)
+    department_name = Column(String(255), nullable=False)
+    description = Column(String(500))
+
+    tenant = relationship("Tenant", backref="departments")
+    users = relationship("User", secondary=user_department, back_populates="departments")
+
+    __table_args__ = (
+        UniqueConstraint('department_name', 'tenant_id', name='uix_department_tenant'),
+    )
+
+class Employee(Base, TimestampMixin):
+    __tablename__ = 'employees'
+
+    employee_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.user_id'), unique=True, nullable=False)
+    
+    employee_name = Column(String(255), nullable=False)
+    gender = Column(String(50))
+    mobile_number = Column(String(15))
+    alternate_mobile_number = Column(String(15))
+    office = Column(String(255))
+    special_need = Column(String(255))
+    subscribe_via_email = Column(Boolean, default=False)
+    subscribe_via_sms = Column(Boolean, default=False)
+    address = Column(String(500))
+    latitude = Column(String(50))
+    longitude = Column(String(50))
+    landmark = Column(String(255))
+
+    user = relationship("User", back_populates="employee", uselist=False)
+
 
 class Group(Base, TimestampMixin):
     __tablename__ = 'groups'
