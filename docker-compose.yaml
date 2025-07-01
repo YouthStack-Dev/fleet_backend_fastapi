@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db_servicemgr:
     image: postgres:15
@@ -16,6 +14,7 @@ services:
   service_manager:
     build:
       context: ./service_manager
+    image: fleet_service_manager:latest
     container_name: service_manager
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db

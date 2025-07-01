@@ -1,55 +1,87 @@
+from psycopg2 import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Tenant, Service, Group, Policy, User, user_tenant, group_role, user_role, group_user
+from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user
 from app.api.schemas.schemas import *
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from typing import List, Optional
+from app.crud.errors import handle_integrity_error
 
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
-    db_tenant = Tenant(name=tenant.name)
-    db.add(db_tenant)
-    db.commit()
-    db.refresh(db_tenant)
-    return db_tenant
+    try:
+        db_tenant = Tenant(
+            tenant_name=tenant.tenant_name,
+            tenant_metadata=tenant.tenant_metadata,
+            is_active=tenant.is_active
+        )
+        db.add(db_tenant)
+        db.commit()
+        db.refresh(db_tenant)
+        return db_tenant
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def get_tenant(db: Session, tenant_id: int):
-    return db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    return db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
 
 def get_tenants(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Tenant).offset(skip).limit(limit).all()
 
 def update_tenant(db: Session, tenant_id: int, tenant_update: TenantCreate):
-    db_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if db_tenant:
-        db_tenant.name = tenant_update.name
-        db.commit()
-        db.refresh(db_tenant)
-    return db_tenant
+    try:
+        db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        if db_tenant:
+            db_tenant.tenant_name = tenant_update.tenant_name
+            db_tenant.tenant_metadata = tenant_update.tenant_metadata
+            db_tenant.is_active = tenant_update.is_active
+            db.commit()
+            db.refresh(db_tenant)
+        return db_tenant
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def patch_tenant(db: Session, tenant_id: int, tenant_update: dict):
-    db_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if db_tenant:
-        for key, value in tenant_update.items():
-            if hasattr(db_tenant, key):
-                setattr(db_tenant, key, value)
-        db.commit()
-        db.refresh(db_tenant)
-    return db_tenant
+    try:
+        db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        if db_tenant:
+            for key, value in tenant_update.items():
+                if hasattr(db_tenant, key):
+                    setattr(db_tenant, key, value)
+            db.commit()
+            db.refresh(db_tenant)
+        return db_tenant
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def delete_tenant(db: Session, tenant_id: int):
-    db_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if db_tenant:
-        db.delete(db_tenant)
-        db.commit()
-    return db_tenant
+    try:
+        db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        if db_tenant:
+            db.delete(db_tenant)
+            db.commit()
+        return db_tenant
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # Service CRUD operations
 def create_service(db: Session, service: ServiceCreate):
-    db_service = Service(name=service.name, description=service.description)
-    db.add(db_service)
-    db.commit()
-    db.refresh(db_service)
-    return db_service
+    try:
+        db_service = Service(
+            name=service.name,
+            description=service.description,
+            service_metadata={}
+        )
+        db.add(db_service)
+        db.commit()
+        db.refresh(db_service)
+        return db_service
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def get_service(db: Session, service_id: int):
     return db.query(Service).filter(Service.id == service_id).first()
@@ -58,72 +90,128 @@ def get_services(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Service).offset(skip).limit(limit).all()
 
 def update_service(db: Session, service_id: int, service_update: ServiceCreate):
-    db_service = db.query(Service).filter(Service.id == service_id).first()
-    if db_service:
-        db_service.name = service_update.name
-        db_service.description = service_update.description
-        db.commit()
-        db.refresh(db_service)
-    return db_service
+    try:
+        db_service = db.query(Service).filter(Service.id == service_id).first()
+        if db_service:
+            db_service.name = service_update.name
+            db_service.description = service_update.description
+            db.commit()
+            db.refresh(db_service)
+        return db_service
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def patch_service(db: Session, service_id: int, service_update: dict):
-    db_service = db.query(Service).filter(Service.id == service_id).first()
-    if db_service:
-        for key, value in service_update.items():
-            if hasattr(db_service, key):
-                setattr(db_service, key, value)
-        db.commit()
-        db.refresh(db_service)
-    return db_service
+    try:
+        db_service = db.query(Service).filter(Service.id == service_id).first()
+        if db_service:
+            for key, value in service_update.items():
+                if hasattr(db_service, key):
+                    setattr(db_service, key, value)
+            db.commit()
+            db.refresh(db_service)
+        return db_service
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def delete_service(db: Session, service_id: int):
-    db_service = db.query(Service).filter(Service.id == service_id).first()
-    if db_service:
-        db.delete(db_service)
-        db.commit()
-    return db_service
+    try:
+        db_service = db.query(Service).filter(Service.id == service_id).first()
+        if db_service:
+            db.delete(db_service)
+            db.commit()
+        return db_service
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # Group CRUD operations
 def create_group(db: Session, group: GroupCreate):
-    db_group = Group(name=group.name, description=group.description, tenant_id=group.tenant_id)
-    db.add(db_group)
-    db.commit()
-    db.refresh(db_group)
-    return db_group
+    try:
+        db_group = Group(
+            group_name=group.group_name,
+            tenant_id=group.tenant_id,
+            description=group.description
+        )
+        db.add(db_group)
+        db.commit()
+        db.refresh(db_group)
+        return db_group
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def get_group(db: Session, group_id: int):
-    return db.query(Group).filter(Group.id == group_id).first()
+    return db.query(Group).filter(Group.group_id == group_id).first()
 
 def get_groups(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Group).offset(skip).limit(limit).all()
 
 def update_group(db: Session, group_id: int, group_update: GroupCreate):
-    db_group = db.query(Group).filter(Group.id == group_id).first()
-    if db_group:
-        db_group.name = group_update.name
-        db_group.tenant_id = group_update.tenant_id
-        db.commit()
-        db.refresh(db_group)
-    return db_group
+    try:
+        db_group = db.query(Group).filter(Group.group_id == group_id).first()
+        if db_group:
+            db_group.group_name = group_update.group_name
+            db_group.tenant_id = group_update.tenant_id
+            db_group.description = group_update.description
+            db.commit()
+            db.refresh(db_group)
+        return db_group
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def patch_group(db: Session, group_id: int, group_update: dict):
-    db_group = db.query(Group).filter(Group.id == group_id).first()
-    if db_group:
-        for key, value in group_update.items():
-            if hasattr(db_group, key):
-                setattr(db_group, key, value)
-        db.commit()
-        db.refresh(db_group)
-    return db_group
+    try:
+        db_group = db.query(Group).filter(Group.group_id == group_id).first()
+        if db_group:
+            for key, value in group_update.items():
+                if hasattr(db_group, key):
+                    setattr(db_group, key, value)
+            db.commit()
+            db.refresh(db_group)
+        return db_group
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def delete_group(db: Session, group_id: int):
-    db_group = db.query(Group).filter(Group.id == group_id).first()
-    if db_group:
-        db.delete(db_group)
-        db.commit()
-    return db_group
+    try:
+        db_group = db.query(Group).filter(Group.group_id == group_id).first()
+        if db_group:
+            db.delete(db_group)
+            db.commit()
+        return db_group
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # Policy CRUD operations
+def create_policy(db: Session, policy: PolicyCreate):
+    try:
+        db_policy = Policy(
+            tenant_id=policy.tenant_id,
+            service_id=policy.service_id,
+            module_id=policy.module_id,
+            can_view=policy.can_view,
+            can_create=policy.can_create,
+            can_edit=policy.can_edit,
+            can_delete=policy.can_delete,
+            group_id=policy.group_id,
+            role_id=policy.role_id,
+            user_id=policy.user_id,
+            condition=policy.condition
+        )
+        db.add(db_policy)
+        db.commit()
+        db.refresh(db_policy)
+        return db_policy
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
+
 def get_policies(
     db: Session,
     skip: int = 0,
@@ -154,56 +242,75 @@ def get_policies(
     return query.offset(skip).limit(limit).all()
 
 def get_policy(db: Session, policy_id: int):
-    return db.query(Policy).filter(Policy.id == policy_id).first()
+    return db.query(Policy).filter(Policy.policy_id == policy_id).first()
 
 def update_policy(db: Session, policy_id: int, policy_update):
-    db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
-    if db_policy:
-        db_policy.tenant_id = policy_update.tenant_id
-        db_policy.service_id = policy_update.service_id
-        db_policy.resource = policy_update.resource
-        db_policy.action = policy_update.action
-        db_policy.group_id = policy_update.group_id
-        db_policy.role_id = policy_update.role_id
-        db_policy.user_id = policy_update.user_id
-        db_policy.condition = policy_update.condition
-        db.commit()
-        db.refresh(db_policy)
-    return db_policy
+    try:
+        db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
+        if db_policy:
+            db_policy.tenant_id = policy_update.tenant_id
+            db_policy.service_id = policy_update.service_id
+            db_policy.module_id = policy_update.module_id
+            db_policy.can_view = policy_update.can_view
+            db_policy.can_create = policy_update.can_create
+            db_policy.can_edit = policy_update.can_edit
+            db_policy.can_delete = policy_update.can_delete
+            db_policy.group_id = policy_update.group_id
+            db_policy.role_id = policy_update.role_id
+            db_policy.user_id = policy_update.user_id
+            db_policy.condition = policy_update.condition
+            db.commit()
+            db.refresh(db_policy)
+        return db_policy
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def patch_policy(db: Session, policy_id: int, policy_update: dict):
-    db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
-    if db_policy:
-        for key, value in policy_update.items():
-            if hasattr(db_policy, key):
-                setattr(db_policy, key, value)
-        db.commit()
-        db.refresh(db_policy)
-    return db_policy
+    try:
+        db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
+        if db_policy:
+            for key, value in policy_update.items():
+                if hasattr(db_policy, key):
+                    setattr(db_policy, key, value)
+            db.commit()
+            db.refresh(db_policy)
+        return db_policy
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def delete_policy(db: Session, policy_id: int):
-    db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
-    if db_policy:
-        db.delete(db_policy)
-        db.commit()
-    return db_policy
+    try:
+        db_policy = db.query(Policy).filter(Policy.id == policy_id).first()
+        if db_policy:
+            db.delete(db_policy)
+            db.commit()
+        return db_policy
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # User cruds
 def create_user(db: Session, user: UserCreate):
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=user.hashed_password,
-        full_name=user.full_name,
-        is_active=user.is_active if hasattr(user, "is_active") else 1
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    try:
+        db_user = User(
+            username=user.username,
+            email=user.email,
+            hashed_password=user.hashed_password,
+            tenant_id=user.tenant_id,
+            is_active=user.is_active if user.is_active is not None else 1
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def get_user(db: Session, user_id: int):
-    return db.query(User).filter(User.id == user_id).first()
+    return db.query(User).filter(User.user_id == user_id).first()
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(User).offset(skip).limit(limit).all()
@@ -211,115 +318,218 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
 
-def verify_password(plain_password: str, hashed_password: str):
-    # Replace with actual password hashing in production
-    return plain_password == hashed_password
+
 
 def update_user(db: Session, user_id: int, user_update: UserCreate):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user:
-        db_user.username = user_update.username
-        db_user.email = user_update.email
-        db_user.hashed_password = user_update.hashed_password
-        db_user.full_name = user_update.full_name
-        db_user.is_active = user_update.is_active if hasattr(user_update, "is_active") else db_user.is_active
-        db.commit()
-        db.refresh(db_user)
-    return db_user
+    try:
+        db_user = db.query(User).filter(User.user_id == user_id).first()
+        if db_user:
+            for key, value in user_update.dict().items():
+                setattr(db_user, key, value)
+            db.commit()
+            db.refresh(db_user)
+            return db_user
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def patch_user(db: Session, user_id: int, user_update: dict):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user:
-        for key, value in user_update.items():
-            if hasattr(db_user, key):
-                setattr(db_user, key, value)
-        db.commit()
-        db.refresh(db_user)
-    return db_user
+    try:
+        db_user = db.query(User).filter(User.user_id == user_id).first()
+        if db_user:
+            for key, value in user_update.items():
+                if hasattr(db_user, key):
+                    setattr(db_user, key, value)
+            db.commit()
+            db.refresh(db_user)
+        return db_user
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def delete_user(db: Session, user_id: int):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user:
-        db.delete(db_user)
-        db.commit()
-    return db_user
+    try:
+        db_user = db.query(User).filter(User.user_id == user_id).first()
+        if db_user:
+            db.delete(db_user)
+            db.commit()
+        return db_user
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # User-Tenant mapping
 def add_user_tenant(db: Session, user_id: int, tenant_id: int, metadata: dict = None):
-    stmt = user_tenant.insert().values(user_id=user_id, tenant_id=tenant_id, metadata=metadata)
-    db.execute(stmt)
-    db.commit()
-    return {"added": True}
+    try:
+        stmt = user_tenant.insert().values(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            metadata=metadata
+        )
+        db.execute(stmt)
+        db.commit()
+        return {"status": "success", "message": "User added to tenant"}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def list_user_tenants(db: Session):
     stmt = select(user_tenant)
     return db.execute(stmt).fetchall()
 
 def remove_user_tenant(db: Session, user_id: int, tenant_id: int):
-    stmt = user_tenant.delete().where(
-        and_(user_tenant.c.user_id == user_id, user_tenant.c.tenant_id == tenant_id)
-    )
-    db.execute(stmt)
-    db.commit()
-    return {"removed": True}
+    try:
+        stmt = user_tenant.delete().where(
+            and_(user_tenant.c.user_id == user_id, user_tenant.c.tenant_id == tenant_id)
+        )
+        db.execute(stmt)
+        db.commit()
+        return {"removed": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # Group-Role mapping
 def add_group_role(db: Session, group_id: int, role_id: int):
-    stmt = group_role.insert().values(group_id=group_id, role_id=role_id)
-    db.execute(stmt)
-    db.commit()
-    return {"added": True}
+    try:
+        stmt = group_role.insert().values(group_id=group_id, role_id=role_id)
+        db.execute(stmt)
+        db.commit()
+        return {"added": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def list_group_roles(db: Session):
     stmt = select(group_role)
     return db.execute(stmt).fetchall()
 
 def remove_group_role(db: Session, group_id: int, role_id: int):
-    stmt = group_role.delete().where(
-        and_(group_role.c.group_id == group_id, group_role.c.role_id == role_id)
-    )
-    db.execute(stmt)
-    db.commit()
-    return {"removed": True}
+    try:
+        stmt = group_role.delete().where(
+            and_(group_role.c.group_id == group_id, group_role.c.role_id == role_id)
+        )
+        db.execute(stmt)
+        db.commit()
+        return {"removed": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # User-Role mapping
 def add_user_role(db: Session, user_id: int, role_id: int, tenant_id: int):
-    stmt = user_role.insert().values(user_id=user_id, role_id=role_id, tenant_id=tenant_id)
-    db.execute(stmt)
-    db.commit()
-    return {"added": True}
+    try:
+        stmt = user_role.insert().values(user_id=user_id, role_id=role_id, tenant_id=tenant_id)
+        db.execute(stmt)
+        db.commit()
+        return {"added": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def list_user_roles(db: Session):
     stmt = select(user_role)
     return db.execute(stmt).fetchall()
 
 def remove_user_role(db: Session, user_id: int, role_id: int, tenant_id: int):
-    stmt = user_role.delete().where(
-        and_(
-            user_role.c.user_id == user_id,
-            user_role.c.role_id == role_id,
-            user_role.c.tenant_id == tenant_id
+    try:
+        stmt = user_role.delete().where(
+            and_(
+                user_role.c.user_id == user_id,
+                user_role.c.role_id == role_id,
+                user_role.c.tenant_id == tenant_id
+            )
         )
-    )
-    db.execute(stmt)
-    db.commit()
-    return {"removed": True}
+        db.execute(stmt)
+        db.commit()
+        return {"removed": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 # Group-User mapping
 def add_group_user(db: Session, group_id: int, user_id: int):
-    stmt = group_user.insert().values(group_id=group_id, user_id=user_id)
-    db.execute(stmt)
-    db.commit()
-    return {"added": True}
+    try:
+        stmt = group_user.insert().values(
+            group_id=group_id,
+            user_id=user_id
+        )
+        db.execute(stmt)
+        db.commit()
+        return {"status": "success", "message": "User added to group"}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def list_group_users(db: Session):
     stmt = select(group_user)
     return db.execute(stmt).fetchall()
 
 def remove_group_user(db: Session, group_id: int, user_id: int):
-    stmt = group_user.delete().where(
-        and_(group_user.c.group_id == group_id, group_user.c.user_id == user_id)
+    try:
+        stmt = group_user.delete().where(
+            and_(group_user.c.group_id == group_id, group_user.c.user_id == user_id)
+        )
+        db.execute(stmt)
+        db.commit()
+        return {"removed": True}
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
+
+# User roles and permissions
+def get_user_roles(db: Session, user_id: int):
+    stmt = select(Role.role_name).join(user_role).join(User).where(User.user_id == user_id)
+    return [row[0] for row in db.execute(stmt).fetchall()]
+
+def get_user_permissions(db: Session, user_id: int):
+    query = (
+        select(
+            Service.name.label('service_name'),
+            Module.name.label('module_name'),
+            Policy.service_id,
+            Policy.module_id,
+            Policy.can_view,
+            Policy.can_create,
+            Policy.can_edit,
+            Policy.can_delete,
+            Policy.condition
+        )
+        .join(Service, Policy.service_id == Service.id)
+        .join(Module, Policy.module_id == Module.id)
+        .join(Group, Policy.group_id == Group.group_id, isouter=True)
+        .join(group_user, Group.group_id == group_user.c.group_id, isouter=True)
+        .join(Role, Policy.role_id == Role.role_id, isouter=True)
+        .join(user_role, Role.role_id == user_role.c.role_id, isouter=True)
+        .where(
+            or_(
+                Policy.user_id == user_id,
+                group_user.c.user_id == user_id,
+                user_role.c.user_id == user_id
+            )
+        )
     )
-    db.execute(stmt)
-    db.commit()
-    return {"removed": True}
+    
+    permissions = []
+    for row in db.execute(query).fetchall():
+        actions = []
+        if row.can_view:
+            actions.append("read")
+        if row.can_create:
+            actions.append("create")
+        if row.can_edit:
+            actions.append("update")
+        if row.can_delete:
+            actions.append("delete")
+            
+        permissions.append({
+            "module": row.module_name,
+            "service": row.service_name,
+            "module_id": row.module_id,
+            "service_id": row.service_id,
+            "action": actions,
+            "resource": row.service_name,
+            "constraints": row.condition or {}
+        })
+    
+    return permissions

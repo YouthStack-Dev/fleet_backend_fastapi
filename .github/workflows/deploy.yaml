@@ -7,7 +7,9 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  REPO_NAME: fleet-service_manager
+
+  REPO_NAME: fleet
+
   IMAGE_TAG: latest
   STACK_NAME: fleet-service_manager
 
@@ -31,14 +33,42 @@ jobs:
         run: echo "ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
+        id: login-ecr
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
           docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          aws ecr get-login-password --region $AWS_REGION | \
+          echo "ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com" >> $GITHUB_ENV
 
       - name: Create ECR repository if not exists
         run: |
-          aws ecr describe-repositories --repository-names $REPO_NAME --region $AWS_REGION || \
-          aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
+          echo "AWS Account: ${ACCOUNT_ID}"
+          echo "AWS Region: ${AWS_REGION}"
+          echo "Repository name: ${REPO_NAME}"
+          
+          # Try to create repository - ignore if exists
+          aws ecr create-repository \
+            --repository-name ${REPO_NAME} \
+            --region ${AWS_REGION} \
+            --image-scanning-configuration scanOnPush=true || true
+          
+          # Verify repository exists
+          REPO_CHECK=$(aws ecr describe-repositories \
+            --repository-names ${REPO_NAME} \
+            --region ${AWS_REGION} \
+            --query 'repositories[0].repositoryName' \
+            --output text 2>/dev/null || echo "NOT_FOUND")
+          
+          if [ "$REPO_CHECK" = "NOT_FOUND" ]; then
+            echo "Repository ${REPO_NAME} not found or not accessible"
+            exit 1
+          fi
+
+      - name: Install Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
 
       - name: Install Docker Compose
         run: |
@@ -47,13 +77,26 @@ jobs:
           docker-compose version
 
       - name: Build, tag, and push Docker image
+        env:
+          ECR_REGISTRY: ${{ env.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
         run: |
-          docker-compose build
-          IMAGE_NAME=$(docker-compose config | grep 'image:' | awk '{print $2}')
-          IMAGE_URI=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO_NAME:$IMAGE_TAG
-          docker tag $IMAGE_NAME $IMAGE_URI
-          docker push $IMAGE_URI
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+          # Build and tag in one step
+          docker compose build service_manager
+          
+          REPOSITORY_URI=${ECR_REGISTRY}/${REPO_NAME}
+          echo "Using repository URI: ${REPOSITORY_URI}"
+          
+          # Tag and push
+          docker tag fleet_service_manager:latest ${REPOSITORY_URI}:${IMAGE_TAG}
+          docker push ${REPOSITORY_URI}:${IMAGE_TAG} || {
+            echo "Push failed. Repository status:"
+            aws ecr describe-repositories --repository-names ${REPO_NAME} --region ${AWS_REGION}
+            exit 1
+          }
+          
+          echo "IMAGE_URI=${REPOSITORY_URI}:${IMAGE_TAG}" >> $GITHUB_ENV
+
 
       - name: Deploy CloudFormation stack
         run: |

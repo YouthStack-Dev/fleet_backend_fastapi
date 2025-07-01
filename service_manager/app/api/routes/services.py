@@ -2,59 +2,77 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.api.schemas.schemas import ServiceCreate, ServiceRead
-from app.api.routes.auth import token_dependency
 from app.controller.service_controller import ServiceController
+from common_utils.auth.permission_checker import PermissionChecker
 
 router = APIRouter()
 service_controller = ServiceController()
 
 @router.post("/", response_model=ServiceRead)
-def create_service(
+async def create_service(
     service: ServiceCreate,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.create"]))
 ):
-    return service_controller.create_service(service, db)
+    try:
+        return service_controller.create_service(service, db)
+    except HTTPException as e:
+        raise e
 
 @router.get("/", response_model=list[ServiceRead])
-def get_services(
-    token: token_dependency,
+async def get_services(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.read"]))
 ):
-    return service_controller.get_services(db, skip=skip, limit=limit)
+    try:
+        return service_controller.get_services(db, skip=skip, limit=limit)
+    except HTTPException as e:
+        raise e
 
 @router.get("/{service_id}", response_model=ServiceRead)
-def get_service(
+async def get_service(
     service_id: int,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.read"]))
 ):
-    return service_controller.get_service(service_id, db)
+    try:
+        return service_controller.get_service(service_id, db)
+    except HTTPException as e:
+        raise e
 
 @router.put("/{service_id}", response_model=ServiceRead)
-def update_service(
+async def update_service(
     service_id: int,
     service_update: ServiceCreate,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.update"]))
 ):
-    return service_controller.update_service(service_id, service_update, db)
+    try:
+        return service_controller.update_service(service_id, service_update, db)
+    except HTTPException as e:
+        raise e
 
 @router.patch("/{service_id}", response_model=ServiceRead)
-def patch_service(
+async def patch_service(
     service_id: int,
     service_update: dict,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.update"]))
 ):
-    return service_controller.patch_service(service_id, service_update, db)
+    try:
+        return service_controller.patch_service(service_id, service_update, db)
+    except HTTPException as e:
+        raise e
 
 @router.delete("/{service_id}", response_model=ServiceRead)
-def delete_service(
+async def delete_service(
     service_id: int,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["service_management.delete"]))
 ):
-    return service_controller.delete_service(service_id, db)
+    try:
+        return service_controller.delete_service(service_id, db)
+    except HTTPException as e:
+        raise e
