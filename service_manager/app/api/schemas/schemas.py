@@ -47,13 +47,16 @@ class GroupRead(GroupCreate):
         from_attributes = True
 
 class DepartmentBase(BaseModel):
-    tenant_id: int
+    # tenant_id: int
     department_name: str
     description: Optional[str]
 
 
 class DepartmentCreate(DepartmentBase):
     pass
+
+class DepartmentRead(DepartmentBase):
+    department_id: int
 
 
 class DepartmentUpdate(BaseModel):
