@@ -5,6 +5,8 @@ from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
 from app.crud.errors import handle_integrity_error
+from app.database.models import Department
+from fastapi import HTTPException
 
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
@@ -533,3 +535,84 @@ def get_user_permissions(db: Session, user_id: int):
         })
     
     return permissions
+
+
+
+
+# Department CRUD operations
+
+def create_department(db, department_data, tenant_id):
+    try:
+        department = Department(
+            tenant_id=tenant_id,
+            department_name=department_data.department_name,
+            description=department_data.description
+        )
+        db.add(department)
+        db.commit()
+        db.refresh(department)
+        return department
+
+    except IntegrityError as e:
+        db.rollback()
+        if 'uix_department_tenant' in str(e.orig):
+            raise HTTPException(status_code=409, detail="Department with this name already exists for the tenant.")
+        raise HTTPException(status_code=400, detail="Database integrity error.")
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unexpected error occurred.")
+def get_department(db, department_id, tenant_id):
+    try:
+        department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
+        if not department:
+            raise HTTPException(status_code=404, detail="Department not found.")
+        return department
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching department.")
+
+
+def get_departments(db, tenant_id, skip=0, limit=100):
+    try:
+        return db.query(Department).filter_by(tenant_id=tenant_id).offset(skip).limit(limit).all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching departments.")
+
+
+def update_department(db, department_id, department, tenant_id):
+    try:
+        db_department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
+        if not db_department:
+            raise HTTPException(status_code=404, detail="Department not found.")
+
+        db_department.department_name = department.department_name
+        db_department.description = department.description
+
+        db.commit()
+        db.refresh(db_department)
+        return db_department
+
+    except IntegrityError as e:
+        db.rollback()
+        if 'uix_department_tenant' in str(e.orig):
+            raise HTTPException(status_code=409, detail="Department with this name already exists for the tenant.")
+        raise HTTPException(status_code=400, detail="Database integrity error during update.")
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unexpected error occurred while updating department.")
+
+
+def delete_department(db, department_id, tenant_id):
+    try:
+        db_department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
+        if not db_department:
+            raise HTTPException(status_code=404, detail="Department not found.")
+
+        db.delete(db_department)
+        db.commit()
+        return db_department
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unexpected error occurred while deleting department.")

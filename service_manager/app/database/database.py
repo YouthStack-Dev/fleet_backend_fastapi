@@ -67,6 +67,7 @@ def seed_data():
             # Create Modules
             modules = [
                 Module(service_id=services[0].id, name="user_management", description="Manage user accounts"),
+                Module(service_id=services[0].id, name="department_management", description="Manage departments"),
                 Module(service_id=services[0].id, name="group_management", description="Manage user groups"),
                 Module(service_id=services[0].id, name="mapping_management", description="Vehicle maintenance tracking"),
                 Module(service_id=services[0].id, name="policy_management", description="Handle vehicle reservations"),
@@ -200,9 +201,9 @@ def seed_data():
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[5].id,
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
-                # Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[6].id,
-                #       can_view=True, can_create=True, can_edit=True, can_delete=True,
-                #       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[6].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
                 Policy(tenant_id=tenants[1].tenant_id, service_id=services[1].id, module_id=modules[2].id,
                       can_view=True, can_create=True, can_edit=False, can_delete=False,
                       role_id=roles[1].role_id),
