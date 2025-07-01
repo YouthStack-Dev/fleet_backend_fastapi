@@ -37,14 +37,16 @@ def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: S
     # Get user's roles and permissions
     roles = crud.get_user_roles(db, user.user_id)
     permissions = crud.get_user_permissions(db, user.user_id)
+    # Example if you only want permission names as strings
+    # permission_strings = [perm["module"] for perm in permissions]  # Or however you want to extract string
+
     
     # Create token with roles and permissions
     access_token = create_access_token(
         user_id=user.user_id,
         tenant_id=user.tenant_id,
         roles=roles,
-        permissions=permissions,
+        permissions=permissions
     )
-    
-    return TokenResponse(access_token=access_token, token_type="bearer")
 
+    return TokenResponse(access_token=access_token, token_type="bearer", permissions=permissions)
