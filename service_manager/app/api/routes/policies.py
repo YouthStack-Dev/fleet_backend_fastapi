@@ -1,94 +1,91 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.database import get_db
-from app.api.schemas.schemas import GroupCreate, GroupRead, AssignPolicyRequest, PolicyRead
+from app.api.schemas.schemas import PolicyCreate, PolicyRead
 from app.controller.policy_controller import PolicyController
-from app.api.routes.auth import token_dependency
+from common_utils.auth.permission_checker import PermissionChecker
 
 router = APIRouter()
 policy_controller = PolicyController()
 
-@router.post("/", response_model=GroupRead)
-def create_group(
-    group: GroupCreate,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+@router.post("/", response_model=PolicyRead)
+async def create_policy(
+    policy: PolicyCreate,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.create"]))
 ):
-    return policy_controller.create_group(group, db)
+    try:
+        return policy_controller.create_policy(policy, db)
+    except HTTPException as e:
+        raise e
 
-@router.post("/assign_policy")
-def assign_policy(
-    req: AssignPolicyRequest,
-    token: token_dependency,
-    db: Session = Depends(get_db)
-):
-    return policy_controller.assign_policy(req, db)
-
-@router.post("/remove_policy")
-def remove_policy(
-    req: AssignPolicyRequest,
-    token: token_dependency,
-    db: Session = Depends(get_db)
-):
-    return policy_controller.remove_policy(req, db)
-
-@router.get("/search", response_model=list[PolicyRead])
-def get_policies(
+@router.get("/", response_model=list[PolicyRead])
+async def get_policies(
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.read"])),
     skip: int = 0,
     limit: int = 100,
     tenant_id: int = None,
     service_id: int = None,
     group_id: int = None,
     role_id: int = None,
-    user_id: int = None,
-    action: str = None,
-    resource: str = None,
-    token: token_dependency = None,
-    db: Session = Depends(get_db)
+    user_id: int = None
 ):
-    filters = dict(
-        tenant_id=tenant_id,
-        service_id=service_id,
-        group_id=group_id,
-        role_id=role_id,
-        user_id=user_id,
-        action=action,
-        resource=resource,
+    return policy_controller.get_policies(
+        db, skip, limit, tenant_id, service_id, group_id, role_id, user_id
     )
-    # Remove None values
-    filters = {k: v for k, v in filters.items() if v is not None}
-    return policy_controller.get_policies(db, skip=skip, limit=limit, **filters)
 
 @router.get("/{policy_id}", response_model=PolicyRead)
-def get_policy(
+async def get_policy(
     policy_id: int,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.read"]))
 ):
-    return policy_controller.get_policy(policy_id, db)
+    policy = policy_controller.get_policy(policy_id, db)
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return policy
 
 @router.put("/{policy_id}", response_model=PolicyRead)
-def update_policy(
+async def update_policy(
     policy_id: int,
-    policy_update: PolicyRead,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    policy_update: PolicyCreate,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.update"]))
 ):
-    return policy_controller.update_policy(policy_id, policy_update, db)
+    try:
+        policy = policy_controller.update_policy(policy_id, policy_update, db)
+        if not policy:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return policy
+    except HTTPException as e:
+        raise e
 
 @router.patch("/{policy_id}", response_model=PolicyRead)
-def patch_policy(
+async def patch_policy(
     policy_id: int,
     policy_update: dict,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.update"]))
 ):
-    return policy_controller.patch_policy(policy_id, policy_update, db)
+    try:
+        policy = policy_controller.patch_policy(policy_id, policy_update, db)
+        if not policy:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return policy
+    except HTTPException as e:
+        raise e
 
 @router.delete("/{policy_id}", response_model=PolicyRead)
-def delete_policy(
+async def delete_policy(
     policy_id: int,
-    token: token_dependency,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["policy_management.delete"]))
 ):
-    return policy_controller.delete_policy(policy_id, db)
+    try:
+        policy = policy_controller.delete_policy(policy_id, db)
+        if not policy:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return policy
+    except HTTPException as e:
+        raise e
