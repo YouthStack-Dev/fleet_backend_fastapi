@@ -13,7 +13,7 @@ class TenantRead(TenantCreate):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CompanyCreate(BaseModel):
     name: str
@@ -22,7 +22,7 @@ class CompanyCreate(BaseModel):
 class CompanyRead(CompanyCreate):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ServiceCreate(BaseModel):
     name: str
@@ -31,7 +31,7 @@ class ServiceCreate(BaseModel):
 class ServiceRead(ServiceCreate):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class GroupCreate(BaseModel):
     group_name: str
@@ -44,7 +44,7 @@ class GroupRead(GroupCreate):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RoleCreate(BaseModel):
     role_name: str
@@ -57,7 +57,7 @@ class RoleRead(RoleCreate):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ModuleCreate(BaseModel):
     service_id: int
@@ -68,7 +68,7 @@ class ModuleRead(ModuleCreate):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PolicyEndpointCreate(BaseModel):
     endpoint: str
@@ -76,7 +76,7 @@ class PolicyEndpointCreate(BaseModel):
 class PolicyEndpointRead(PolicyEndpointCreate):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PolicyCreate(BaseModel):
     tenant_id: int
@@ -95,7 +95,7 @@ class PolicyRead(PolicyCreate):
     policy_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class AssignPolicyRequest(BaseModel):
     group_id: int
@@ -118,15 +118,30 @@ class UserRead(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
+class Constraints(BaseModel):
+    ip_range: str
+
+
+class PermissionItem(BaseModel):
+    module: str
+    service: str
+    module_id: int
+    service_id: int
+    action: List[str]
+    resource: str
+    constraints: Constraints
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    permissions: List[PermissionItem] = []
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
