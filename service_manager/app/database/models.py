@@ -85,12 +85,10 @@ class Department(Base, TimestampMixin):
 class Employee(Base, TimestampMixin):
     __tablename__ = 'employees'
 
-    employee_id = Column(Integer, primary_key=True)
-    employee_code = Column(String(50), unique=True, nullable=False)  # For 'sam1', etc.
+    employee_code = Column(String(50), unique=True, nullable=False ,primary_key=True)  # For 'sam1', etc.
     user_id = Column(Integer, ForeignKey('users.user_id'), unique=True, nullable=False)
     department_id = Column(Integer, ForeignKey('departments.department_id'), nullable=False)
 
-    employee_name = Column(String(255), nullable=False)
     gender = Column(String(50))
     mobile_number = Column(String(15))
     alternate_mobile_number = Column(String(15))

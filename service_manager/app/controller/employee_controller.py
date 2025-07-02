@@ -5,28 +5,32 @@ class EmployeeController:
 
 
     def create_employee(self, employee, db, tenant_id):
-        return create_employee(db, employee, tenant_id)
-
-
-    def get_employee(self, employee_id, db, tenant_id):
         try:
-            return get_employee(db, employee_id, tenant_id)
+            return create_employee(db, employee, tenant_id)
+        except HTTPException as e:
+            raise e
+        except Exception :
+            raise HTTPException(status_code=500, detail="Unexpected error occurred while creating employee.")
+
+    def get_employee(self, employee_code, db, tenant_id):
+        try:
+            return get_employee(db, employee_code, tenant_id)
         except HTTPException as e:
             raise e
         except Exception:
             raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching employee.")
 
-    def update_employee(self, employee_id, employee, db, tenant_id):
+    def update_employee(self, employee_code, employee, db, tenant_id):
         try:
-            return update_employee(db, employee_id, employee, tenant_id)
+            return update_employee(db, employee_code, employee, tenant_id)
         except HTTPException as e:
             raise e
         except Exception:
             raise HTTPException(status_code=500, detail="Unexpected error occurred while updating employee.")
 
-    def delete_employee(self, employee_id, db, tenant_id):
+    def delete_employee(self, employee_code, db, tenant_id):
         try:
-            return delete_employee(db, employee_id, tenant_id)
+            return delete_employee(db, employee_code, tenant_id)
         except HTTPException as e:
             raise e
         except Exception:

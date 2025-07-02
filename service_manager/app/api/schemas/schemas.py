@@ -71,7 +71,7 @@ class DepartmentOut(DepartmentBase):
         from_attributes = True
 
 class EmployeeBase(BaseModel):
-    employee_name: str
+    employee_code: str  # Added to Base as it's required for both create & update
     gender: str
     mobile_number: str
     alternate_mobile_number: Optional[str]
@@ -91,10 +91,21 @@ class EmployeeCreate(EmployeeBase):
     hashed_password: str
 
 class EmployeeUpdate(EmployeeBase):
-    pass
+    employee_code: Optional[str]  # Optional for update
+    gender: Optional[str]
+    mobile_number: Optional[str]
+    alternate_mobile_number: Optional[str]
+    office: Optional[str]
+    special_need: Optional[str]
+    subscribe_via_email: Optional[bool]
+    subscribe_via_sms: Optional[bool]
+    address: Optional[str]
+    latitude: Optional[str]
+    longitude: Optional[str]
+    landmark: Optional[str]
+    department_id: Optional[int]  # Added to Base as it's required for both create & update
 
 class EmployeeRead(EmployeeBase):
-    employee_id: int
     employee_code: str
     user_id: int
 
