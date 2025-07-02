@@ -27,7 +27,7 @@ def get_db():
 def seed_data():
     session = SessionLocal()
     try:
-        from app.database.models import Tenant, User, Group, Role, Service, Module, Policy, user_tenant, group_user, group_role, user_role, Department, Employee, user_department
+        from app.database.models import Tenant, User, Group, Role, Service, Module, Policy, user_tenant, group_user, group_role, user_role, Department, Employee
 
         # Check if data already exists
         if session.query(Tenant).first():
@@ -67,6 +67,8 @@ def seed_data():
             # Create Modules
             modules = [
                 Module(service_id=services[0].id, name="user_management", description="Manage user accounts"),
+                Module(service_id=services[0].id, name="department_management", description="Manage departments"),
+                Module(service_id=services[0].id, name="employee_management", description="Manage employees"),
                 Module(service_id=services[0].id, name="group_management", description="Manage user groups"),
                 Module(service_id=services[0].id, name="mapping_management", description="Vehicle maintenance tracking"),
                 Module(service_id=services[0].id, name="policy_management", description="Handle vehicle reservations"),
@@ -104,7 +106,9 @@ def seed_data():
             # Create Employees (Assuming you want to make existing users employees)
             employees = [
                 Employee(
+                    employee_code="acm1",
                     user_id=users[0].user_id,
+                    department_id=departments[0].department_id,
                     employee_name="John Doe",
                     gender="Male",
                     mobile_number="9876543210",
@@ -119,7 +123,9 @@ def seed_data():
                     landmark="Near Big Mall"
                 ),
                 Employee(
+                    employee_code="sta1",
                     user_id=users[1].user_id,
+                    department_id=departments[1].department_id,
                     employee_name="Jane Smith",
                     gender="Female",
                     mobile_number="8123456789",
@@ -134,7 +140,9 @@ def seed_data():
                     landmark="Opposite Metro Station"
                 ),
                 Employee(
+                    employee_code="med1",
                     user_id=users[2].user_id,
+                    department_id=departments[2].department_id,
                     employee_name="Michael Brown",
                     gender="Male",
                     mobile_number="7894561230",
@@ -149,15 +157,11 @@ def seed_data():
                     landmark="Near City Hospital"
                 )
             ]
+
             session.add_all(employees)
             session.flush()
 
-            # Map Users to Departments
-            for user, department in zip(users, departments):
-                session.execute(user_department.insert().values(
-                    user_id=user.user_id,
-                    department_id=department.department_id
-                ))
+        
 
             # Create Groups
             groups = [
@@ -200,9 +204,9 @@ def seed_data():
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[5].id,
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
-                # Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[6].id,
-                #       can_view=True, can_create=True, can_edit=True, can_delete=True,
-                #       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[6].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
                 Policy(tenant_id=tenants[1].tenant_id, service_id=services[1].id, module_id=modules[2].id,
                       can_view=True, can_create=True, can_edit=False, can_delete=False,
                       role_id=roles[1].role_id),

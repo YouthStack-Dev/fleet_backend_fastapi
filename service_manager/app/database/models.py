@@ -41,13 +41,6 @@ user_role = Table(
 )
 
 
-user_department = Table(
-    'user_department',
-    Base.metadata,
-    Column('user_id', ForeignKey('users.user_id'), primary_key=True),
-    Column('department_id', ForeignKey('departments.department_id'), primary_key=True),
-    UniqueConstraint('user_id', name='uix_user_department')
-)
 
 class Tenant(Base, TimestampMixin):
     __tablename__ = 'tenants'
@@ -75,8 +68,6 @@ class User(Base, TimestampMixin):
     groups = relationship("Group", secondary=group_user, back_populates="users")
     roles = relationship("Role", secondary=user_role, back_populates="users")
     employee = relationship("Employee", back_populates="user", uselist=False)
-    departments = relationship("Department", secondary=user_department, back_populates="users")
-
 class Department(Base, TimestampMixin):
     __tablename__ = 'departments'
 
@@ -86,7 +77,6 @@ class Department(Base, TimestampMixin):
     description = Column(String(500))
 
     tenant = relationship("Tenant", backref="departments")
-    users = relationship("User", secondary=user_department, back_populates="departments")
 
     __table_args__ = (
         UniqueConstraint('department_name', 'tenant_id', name='uix_department_tenant'),
@@ -96,8 +86,10 @@ class Employee(Base, TimestampMixin):
     __tablename__ = 'employees'
 
     employee_id = Column(Integer, primary_key=True)
+    employee_code = Column(String(50), unique=True, nullable=False)  # For 'sam1', etc.
     user_id = Column(Integer, ForeignKey('users.user_id'), unique=True, nullable=False)
-    
+    department_id = Column(Integer, ForeignKey('departments.department_id'), nullable=False)
+
     employee_name = Column(String(255), nullable=False)
     gender = Column(String(50))
     mobile_number = Column(String(15))
@@ -112,6 +104,7 @@ class Employee(Base, TimestampMixin):
     landmark = Column(String(255))
 
     user = relationship("User", back_populates="employee", uselist=False)
+    department = relationship("Department", backref="employees")
 
 
 class Group(Base, TimestampMixin):
