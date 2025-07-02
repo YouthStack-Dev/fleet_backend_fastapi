@@ -18,29 +18,29 @@ async def create_employee(
     return controller.create_employee(employee, db, token_data["tenant_id"])
 
 
-@router.get("/{employee_id}", response_model=EmployeeRead)
+@router.get("/{employee_code}", response_model=EmployeeRead)
 async def get_employee(
-    employee_id: int,
+    employee_code: str,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
 ):
-    return controller.get_employee(employee_id, db, token_data["tenant_id"])
+    return controller.get_employee(employee_code, db, token_data["tenant_id"])
 
 
-@router.put("/{employee_id}", response_model=EmployeeRead)
+@router.put("/{employee_code}", response_model=EmployeeRead)
 async def update_employee(
-    employee_id: int,
+    employee_code: str,
     employee: EmployeeUpdate,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
 ):
-    return controller.update_employee(employee_id, employee, db, token_data["tenant_id"])
+    return controller.update_employee(employee_code, employee, db, token_data["tenant_id"])
 
 
-@router.delete("/{employee_id}", response_model=EmployeeDeleteRead)
+@router.delete("/{employee_code}", response_model=EmployeeDeleteRead)
 async def delete_employee(
-    employee_id: int,
+    employee_code: str,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.delete"]))
 ):
-    return controller.delete_employee(employee_id, db, token_data["tenant_id"])
+    return controller.delete_employee(employee_code, db, token_data["tenant_id"])
