@@ -5,9 +5,8 @@ from app.database.database import get_db
 from app.controller.department_controller import DepartmentController
 from app.api.schemas.schemas import DepartmentCreate, DepartmentRead, DepartmentUpdate
 from common_utils.auth.permission_checker import PermissionChecker
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.database.database import get_db
+
+
 
 router = APIRouter()
 controller = DepartmentController()

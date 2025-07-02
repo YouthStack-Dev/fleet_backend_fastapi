@@ -616,3 +616,164 @@ def delete_department(db, department_id, tenant_id):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail="Unexpected error occurred while deleting department.")
+    
+
+
+
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
+from app.database.models import Employee, User, Tenant, Department
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+def create_employee(db: Session, employee, tenant_id):
+    try:
+        logger.info(f"Creating employee for tenant_id: {tenant_id}, payload: {employee.dict()}")
+
+        # Validate required fields
+        if not employee.username or not employee.username.strip():
+            logger.warning("Missing username in payload")
+            raise HTTPException(status_code=422, detail="Username is required.")
+
+        if not employee.email or not employee.email.strip():
+            logger.warning("Missing email in payload")
+            raise HTTPException(status_code=422, detail="Email is required.")
+
+        if not employee.employee_name or not employee.employee_name.strip():
+            logger.warning("Missing employee_name in payload")
+            raise HTTPException(status_code=422, detail="Employee name is required.")
+
+        if not employee.mobile_number or not employee.mobile_number.strip():
+            logger.warning("Missing mobile_number in payload")
+            raise HTTPException(status_code=422, detail="Mobile number is required.")
+
+        # Check if user exists with this email for the tenant
+        db_user = db.query(User).filter_by(email=employee.email, tenant_id=tenant_id).first()
+
+        if db_user:
+            logger.info(f"User with email {employee.email} already exists, user_id: {db_user.user_id}")
+            existing_employee = db.query(Employee).filter_by(user_id=db_user.user_id).first()
+            if existing_employee:
+                logger.warning(f"User {db_user.user_id} is already an employee.")
+                raise HTTPException(status_code=409, detail="User is already an employee.")
+            user_id = db_user.user_id
+        else:
+            # Check if username already exists for tenant
+            existing_username = db.query(User).filter_by(username=employee.username, tenant_id=tenant_id).first()
+            if existing_username:
+                logger.warning(f"Username {employee.username} already exists for tenant {tenant_id}")
+                raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
+
+            # Create new User
+            logger.info(f"Creating new user: {employee.username}, email: {employee.email}")
+            new_user = User(
+                username=employee.username,
+                email=employee.email,
+                hashed_password=employee.hashed_password,
+                tenant_id=tenant_id,
+                is_active=1
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            user_id = new_user.user_id
+
+        # Validate tenant exists
+        tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
+        if not tenant:
+            logger.error(f"Tenant not found with tenant_id: {tenant_id}")
+            raise HTTPException(status_code=404, detail="Tenant not found.")
+
+        # Validate department belongs to tenant
+        department = db.query(Department).filter_by(department_id=employee.department_id, tenant_id=tenant_id).first()
+        if not department:
+            logger.error(f"Department {employee.department_id} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Department not found for this tenant.")
+
+        # Validate latitude & longitude
+        try:
+            if employee.latitude:
+                float(employee.latitude)
+            if employee.longitude:
+                float(employee.longitude)
+        except ValueError:
+            logger.warning("Invalid latitude or longitude provided.")
+            raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
+
+        # Generate employee_code
+        employee_count = db.query(Employee).join(User).filter(User.tenant_id == tenant_id).count()
+        employee_code = f"{tenant.tenant_name[:3].lower()}{employee_count + 1}"
+        logger.info(f"Generated employee_code: {employee_code}")
+
+        # Create Employee
+        db_employee = Employee(
+            employee_code=employee_code,
+            user_id=user_id,
+            department_id=employee.department_id,
+            employee_name=employee.employee_name.strip(),
+            gender=employee.gender,
+            mobile_number=employee.mobile_number.strip(),
+            alternate_mobile_number=employee.alternate_mobile_number,
+            office=employee.office,
+            special_need=employee.special_need,
+            subscribe_via_email=employee.subscribe_via_email,
+            subscribe_via_sms=employee.subscribe_via_sms,
+            address=employee.address,
+            latitude=employee.latitude,
+            longitude=employee.longitude,
+            landmark=employee.landmark
+        )
+
+        db.add(db_employee)
+        db.commit()
+        db.refresh(db_employee)
+        logger.info(f"Employee created successfully with ID: {db_employee.employee_id}")
+        return db_employee
+
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError: {str(e.orig)}")
+        raise HTTPException(status_code=400, detail="Database integrity error while creating employee.")
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"SQLAlchemyError: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while creating employee.")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error while creating employee: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unexpected error while creating employee.")
+
+
+def get_employee(db, employee_id, tenant_id):
+    employee = db.query(Employee).join(User).filter(Employee.employee_id == employee_id, User.tenant_id == tenant_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+    return employee
+
+
+def update_employee(db, employee_id, employee_data, tenant_id):
+    db_employee = db.query(Employee).join(User).filter(Employee.employee_id == employee_id, User.tenant_id == tenant_id).first()
+    if not db_employee:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    for key, value in employee_data.dict(exclude_unset=True).items():
+        setattr(db_employee, key, value)
+
+    db.commit()
+    db.refresh(db_employee)
+    return db_employee
+
+
+def delete_employee(db, employee_id, tenant_id):
+    db_employee = db.query(Employee).join(User).filter(Employee.employee_id == employee_id, User.tenant_id == tenant_id).first()
+    if not db_employee:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    db.delete(db_employee)
+    db.commit()
+    return db_employee
