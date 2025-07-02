@@ -47,13 +47,16 @@ class GroupRead(GroupCreate):
         from_attributes = True
 
 class DepartmentBase(BaseModel):
-    tenant_id: int
+    # tenant_id: int
     department_name: str
     description: Optional[str]
 
 
 class DepartmentCreate(DepartmentBase):
     pass
+
+class DepartmentRead(DepartmentBase):
+    department_id: int
 
 
 class DepartmentUpdate(BaseModel):
@@ -67,20 +70,42 @@ class DepartmentOut(DepartmentBase):
     class Config:
         from_attributes = True
 
-class EmployeeCreate(BaseModel):
-    user_id: int
+class EmployeeBase(BaseModel):
     employee_name: str
-    gender: Optional[str]
-    mobile_number: Optional[str]
+    gender: str
+    mobile_number: str
     alternate_mobile_number: Optional[str]
-    office: Optional[str]
+    office: str
     special_need: Optional[str]
-    subscribe_via_email: Optional[bool] = False
-    subscribe_via_sms: Optional[bool] = False
-    address: Optional[str]
-    latitude: Optional[str]
-    longitude: Optional[str]
-    landmark: Optional[str]
+    subscribe_via_email: bool
+    subscribe_via_sms: bool
+    address: str
+    latitude: str
+    longitude: str
+    landmark: str
+    department_id: int  # Added to Base as it's required for both create & update
+
+class EmployeeCreate(EmployeeBase):
+    username: str
+    email: str
+    hashed_password: str
+
+class EmployeeUpdate(EmployeeBase):
+    pass
+
+class EmployeeRead(EmployeeBase):
+    employee_id: int
+    employee_code: str
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+class EmployeeDeleteRead(BaseModel):
+    user_id: int
+
+    class Config:
+        from_attributes = True
 
 class RoleCreate(BaseModel):
     role_name: str
