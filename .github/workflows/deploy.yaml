@@ -44,7 +44,7 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         password: ${{ secrets.VPS_PASSWORD }}
         script: |
-          docker pull yourdockeruser/fleet_service_manager:latest
+          docker pull dheerajkumarp/fleet_service_manager:latest
           docker compose -f ~/docker-compose.prod.yml up -d
           docker system prune -af
 # now enabled the work flow 
