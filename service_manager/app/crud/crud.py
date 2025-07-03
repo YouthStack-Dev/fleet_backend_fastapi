@@ -51,17 +51,48 @@ def get_tenants(db: Session, skip: int = 0, limit: int = 100):
 
 def update_tenant(db: Session, tenant_id: int, tenant_update: TenantCreate):
     try:
+        logger.info(f"Update request received for tenant_id: {tenant_id}, payload: {tenant_update.dict()}")
+
         db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
-        if db_tenant:
-            db_tenant.tenant_name = tenant_update.tenant_name
+
+        if not db_tenant:
+            logger.warning(f"Tenant with tenant_id {tenant_id} not found.")
+            raise HTTPException(status_code=404, detail="Tenant not found.")
+
+        # Update fields only if provided
+        if tenant_update.tenant_name is not None:
+            db_tenant.tenant_name = tenant_update.tenant_name.strip()
+
+        if tenant_update.tenant_metadata is not None:
             db_tenant.tenant_metadata = tenant_update.tenant_metadata
+
+        if tenant_update.is_active is not None:
+            if tenant_update.is_active not in (0, 1):
+                logger.warning(f"Invalid is_active value provided: {tenant_update.is_active}")
+                raise HTTPException(status_code=422, detail="is_active must be either 0 (inactive) or 1 (active).")
+            
             db_tenant.is_active = tenant_update.is_active
-            db.commit()
-            db.refresh(db_tenant)
+
+        db.commit()
+        db.refresh(db_tenant)
+
+        logger.info(f"Tenant with tenant_id {tenant_id} updated successfully.")
         return db_tenant
+
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError while updating tenant {tenant_id}: {str(e)}")
+        raise HTTPException(status_code=409, detail="Tenant update violates unique constraint.")
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while updating tenant {tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="A database error occurred while updating the tenant.")
+
     except Exception as e:
         db.rollback()
-        raise handle_integrity_error(e)
+        logger.exception(f"Unexpected error while updating tenant {tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while updating the tenant.")
 
 def patch_tenant(db: Session, tenant_id: int, tenant_update: dict):
     try:
