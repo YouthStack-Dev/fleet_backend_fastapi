@@ -15,7 +15,7 @@ services:
     restart: always
 
   service_manager:
-    image: yourdockeruser/fleet_service_manager:latest
+    image: dheerajkumarp/fleet_service_manager:latest
     container_name: service_manager
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
