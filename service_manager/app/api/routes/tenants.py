@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.database import get_db
-from app.api.schemas.schemas import TenantCreate, TenantRead
+from app.api.schemas.schemas import TenantCreate, TenantRead ,  TenantUpdate
 from app.controller.tenant_controller import TenantController
 from common_utils.auth.permission_checker import PermissionChecker
 
@@ -42,7 +42,7 @@ async def get_tenants(
 @router.put("/{tenant_id}", response_model=TenantRead)
 async def update_tenant(
     tenant_id: int,
-    tenant_update: TenantCreate,
+    tenant_update: TenantUpdate,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["tenant_management.update"]))
 ):
