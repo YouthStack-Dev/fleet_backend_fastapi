@@ -11,18 +11,37 @@ from fastapi import HTTPException
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
     try:
+        logger.info(f"Create tenant request received: {tenant.dict()}")
+
         db_tenant = Tenant(
-            tenant_name=tenant.tenant_name,
+            tenant_name=tenant.tenant_name.strip(),
             tenant_metadata=tenant.tenant_metadata,
             is_active=tenant.is_active
         )
+
         db.add(db_tenant)
         db.commit()
         db.refresh(db_tenant)
+
+        logger.info(f"Tenant created successfully with tenant_id: {db_tenant.tenant_id}")
         return db_tenant
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError while creating tenant: {str(e)}")
+        raise HTTPException(status_code=409, detail="Tenant already exists or unique constraint violated.")
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
+    
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while creating tenant: {str(e)}")
+        raise HTTPException(status_code=500, detail="A database error occurred while creating the tenant.")
+
     except Exception as e:
         db.rollback()
-        raise handle_integrity_error(e)
+        logger.exception(f"Unexpected error while creating tenant: {str(e)}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while creating the tenant.")
 
 def get_tenant(db: Session, tenant_id: int):
     return db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
