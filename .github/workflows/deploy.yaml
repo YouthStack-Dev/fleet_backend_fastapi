@@ -2,11 +2,9 @@ name: Build & Deploy to VPS
 
 on:
   pull_request:
+    types: [closed]
     branches:
       - main
-    types:
-      - closed
-
 
 jobs:
   build-and-deploy:
