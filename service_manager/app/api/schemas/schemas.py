@@ -66,7 +66,8 @@ class DepartmentCreate(DepartmentBase):
 
 class DepartmentRead(DepartmentBase):
     department_id: int
-
+class DepartmentDeleteResponse(BaseModel):
+    message: str
 
 class DepartmentUpdate(BaseModel):
     department_name: Optional[str]

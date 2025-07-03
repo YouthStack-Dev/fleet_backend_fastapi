@@ -669,6 +669,9 @@ def update_department(db, department_id, department, tenant_id):
         if 'uix_department_tenant' in str(e.orig):
             raise HTTPException(status_code=409, detail="Department with this name already exists for the tenant.")
         raise HTTPException(status_code=400, detail="Database integrity error during update.")
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
     
     except Exception as e:
         db.rollback()
@@ -677,17 +680,38 @@ def update_department(db, department_id, department, tenant_id):
 
 def delete_department(db, department_id, tenant_id):
     try:
-        db_department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
-        if not db_department:
-            raise HTTPException(status_code=404, detail="Department not found.")
+        logger.info(f"Delete request received for department_id: {department_id} under tenant_id: {tenant_id}")
+        db_department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()  
 
-        db.delete(db_department)
-        db.commit()
-        return db_department
+        if not db_department:  
+            logger.warning(f"Department with department_id {department_id} not found for tenant {tenant_id}")  
+            raise HTTPException(status_code=404, detail="Department not found for this tenant.")  
 
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while deleting department.")
+        db.delete(db_department)  
+        db.commit()  
+
+        logger.info(f"Department {department_id} successfully deleted for tenant {tenant_id}")  
+        return {"message": f"Department {department_id} deleted successfully."}  
+
+    except IntegrityError as e:  
+        db.rollback()  
+        logger.error(f"IntegrityError while deleting department {department_id} for tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=409, detail="Cannot delete department due to related data constraints.")  
+    
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
+    
+    except SQLAlchemyError as e:  
+        db.rollback()  
+        logger.error(f"Database error while deleting department {department_id} for tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=500, detail="A database error occurred while deleting the department.")  
+
+    except Exception as e:  
+        db.rollback()  
+        logger.exception(f"Unexpected error while deleting department {department_id} for tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while deleting the department.")  
+
     
 
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.controller.department_controller import DepartmentController
-from app.api.schemas.schemas import DepartmentCreate, DepartmentRead, DepartmentUpdate
+from app.api.schemas.schemas import DepartmentCreate, DepartmentRead, DepartmentUpdate, DepartmentDeleteResponse
 from common_utils.auth.permission_checker import PermissionChecker
 
 
@@ -59,7 +59,7 @@ async def update_department(
     return department
 
 
-@router.delete("/{department_id}", response_model=DepartmentRead)
+@router.delete("/{department_id}", response_model=DepartmentDeleteResponse)
 async def delete_department(
     department_id: int,
     db: Session = Depends(get_db),
