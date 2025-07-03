@@ -47,3 +47,4 @@ jobs:
           docker pull yourdockeruser/fleet_service_manager:latest
           docker compose -f ~/docker-compose.prod.yml up -d
           docker system prune -af
+# now enabled the work flow 
