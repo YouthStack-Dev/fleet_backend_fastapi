@@ -78,7 +78,9 @@ def update_tenant(db: Session, tenant_id: int, tenant_update: TenantCreate):
 
         logger.info(f"Tenant with tenant_id {tenant_id} updated successfully.")
         return db_tenant
-
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
     except IntegrityError as e:
         db.rollback()
         logger.error(f"IntegrityError while updating tenant {tenant_id}: {str(e)}")
@@ -110,14 +112,34 @@ def patch_tenant(db: Session, tenant_id: int, tenant_update: dict):
 
 def delete_tenant(db: Session, tenant_id: int):
     try:
-        db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
-        if db_tenant:
-            db.delete(db_tenant)
-            db.commit()
-        return db_tenant
-    except Exception as e:
-        db.rollback()
-        raise handle_integrity_error(e)
+        db_tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()  
+
+        if not db_tenant:  
+            logger.warning(f"Tenant with tenant_id {tenant_id} not found.")  
+            raise HTTPException(status_code=404, detail="Tenant not found.")  
+
+        db.delete(db_tenant)  
+        db.commit()  
+
+        logger.info(f"Tenant with tenant_id {tenant_id} deleted successfully.")  
+        return {"message": f"Tenant {tenant_id} deleted successfully."}  
+
+    except IntegrityError as e:  
+        db.rollback()  
+        logger.error(f"IntegrityError while deleting tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=409, detail="Cannot delete tenant due to related data constraints.")  
+
+    except SQLAlchemyError as e:  
+        db.rollback()  
+        logger.error(f"Database error while deleting tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=500, detail="A database error occurred while deleting the tenant.")  
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
+    except Exception as e:  
+        db.rollback()  
+        logger.exception(f"Unexpected error while deleting tenant {tenant_id}: {str(e)}")  
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while deleting the tenant.")  
 
 # Service CRUD operations
 def create_service(db: Session, service: ServiceCreate):
