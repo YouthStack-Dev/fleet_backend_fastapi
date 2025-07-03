@@ -90,20 +90,20 @@ class EmployeeCreate(EmployeeBase):
     email: str
     hashed_password: str
 
-class EmployeeUpdate(EmployeeBase):
-    employee_code: Optional[str]  # Optional for update
-    gender: Optional[str]
-    mobile_number: Optional[str]
-    alternate_mobile_number: Optional[str]
-    office: Optional[str]
-    special_need: Optional[str]
-    subscribe_via_email: Optional[bool]
-    subscribe_via_sms: Optional[bool]
-    address: Optional[str]
-    latitude: Optional[str]
-    longitude: Optional[str]
-    landmark: Optional[str]
-    department_id: Optional[int]  # Added to Base as it's required for both create & update
+class EmployeeUpdate(BaseModel):
+    # employee_code: Optional[str]  # Optional for update
+    gender: Optional[str] = None
+    mobile_number: Optional[str] = None
+    alternate_mobile_number: Optional[str] = None
+    office: Optional[str] = None
+    special_need: Optional[str] = None
+    subscribe_via_email: Optional[bool] = None
+    subscribe_via_sms: Optional[bool] = None
+    address: Optional[str] = None
+    latitude: Optional[str] = None
+    longitude: Optional[str] = None
+    landmark: Optional[str] = None
+    department_id: Optional[int] = None
 
 class EmployeeRead(EmployeeBase):
     employee_code: str

@@ -744,19 +744,97 @@ def get_employee(db: Session, employee_code, tenant_id):
         raise HTTPException(status_code=404, detail="Employee not found.")
     return employee
 
-def update_employee(db: Session, employee_code, employee_data, tenant_id):
-    db_employee = db.query(Employee).join(User).filter(Employee.employee_code == employee_code, User.tenant_id == tenant_id).first()
-    if not db_employee:
-        logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
-        raise HTTPException(status_code=404, detail="Employee not found.")
+def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
+    try:
+        logger.info(f"Updating employee with code: {employee_code} for tenant_id: {tenant_id}, payload: {employee_update.dict()}")
 
-    for key, value in employee_data.dict(exclude_unset=True).items():
-        setattr(db_employee, key, value)
+        db_employee = db.query(Employee).join(User).filter(
+            Employee.employee_code == employee_code,
+            User.tenant_id == tenant_id
+        ).first()
 
-    db.commit()
-    db.refresh(db_employee)
-    logger.info(f"Employee {employee_code} updated successfully.")
-    return db_employee
+        if not db_employee:
+            logger.warning(f"Employee with code {employee_code} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Employee not found for this tenant.")
+
+        # Validate and update Department if provided
+        if employee_update.department_id is not None:
+            department = db.query(Department).filter_by(department_id=employee_update.department_id, tenant_id=tenant_id).first()
+            if not department:
+                logger.error(f"Department {employee_update.department_id} not found for tenant {tenant_id}")
+                raise HTTPException(status_code=404, detail="Department not found for this tenant.")
+            db_employee.department_id = employee_update.department_id
+
+        # Validate Latitude & Longitude only if provided
+        try:
+            if employee_update.latitude is not None:
+                float(employee_update.latitude)
+            if employee_update.longitude is not None:
+                float(employee_update.longitude)
+        except ValueError:
+            logger.warning("Invalid latitude or longitude provided.")
+            raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
+
+        # Update other fields only if provided
+        if employee_update.gender is not None:
+            db_employee.gender = employee_update.gender
+
+        if employee_update.mobile_number is not None:
+            db_employee.mobile_number = employee_update.mobile_number.strip()
+
+        if employee_update.alternate_mobile_number is not None:
+            db_employee.alternate_mobile_number = employee_update.alternate_mobile_number
+
+        if employee_update.office is not None:
+            db_employee.office = employee_update.office
+
+        if employee_update.special_need is not None:
+            db_employee.special_need = employee_update.special_need
+
+        if employee_update.subscribe_via_email is not None:
+            db_employee.subscribe_via_email = employee_update.subscribe_via_email
+
+        if employee_update.subscribe_via_sms is not None:
+            db_employee.subscribe_via_sms = employee_update.subscribe_via_sms
+
+        if employee_update.address is not None:
+            db_employee.address = employee_update.address
+
+        if employee_update.latitude is not None:
+            db_employee.latitude = employee_update.latitude
+
+        if employee_update.longitude is not None:
+            db_employee.longitude = employee_update.longitude
+
+        if employee_update.landmark is not None:
+            db_employee.landmark = employee_update.landmark
+
+        db.commit()
+        db.refresh(db_employee)
+
+        logger.info(f"Employee {employee_code} updated successfully for tenant {tenant_id}")
+        return db_employee
+    
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError while updating employee: {str(e.orig)}")
+        raise HTTPException(status_code=400, detail="Database integrity error while updating employee.")
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"SQLAlchemyError while updating employee: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while updating employee.")
+
+    except HTTPException as e:
+        db.rollback()
+        logger.warning(f"HTTPException while updating employee: {str(e.detail)}")
+        raise e
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error while updating employee: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unexpected error while updating employee.")
+
 
 def delete_employee(db: Session, employee_code, tenant_id):
     db_employee = db.query(Employee).join(User).filter(Employee.employee_code == employee_code, User.tenant_id == tenant_id).first()
