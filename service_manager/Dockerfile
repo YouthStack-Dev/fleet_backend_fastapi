@@ -2,7 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -10,7 +16,7 @@ RUN pip install --upgrade pip && \
 # Copy app code
 COPY . .
 
-# Expose correct port (should match uvicorn --port)
+# Expose port
 EXPOSE 8100
 
 # Run app
