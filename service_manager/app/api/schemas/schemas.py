@@ -1,11 +1,20 @@
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from datetime import datetime
+from typing_extensions import Literal
 
 class TenantCreate(BaseModel):
     tenant_name: str
     tenant_metadata: Optional[Dict] = None
-    is_active: Optional[int] = 1
+    is_active: Optional[Literal[0, 1]] = 1
+
+class TenantUpdate(BaseModel):
+    tenant_name: Optional[str] = None
+    tenant_metadata: Optional[Dict] = None
+    is_active: Optional[Literal[0, 1]] = None
+
+
+
 
 class TenantRead(TenantCreate):
     tenant_id: int
