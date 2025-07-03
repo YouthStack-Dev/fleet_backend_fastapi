@@ -113,10 +113,7 @@ class EmployeeRead(EmployeeBase):
         from_attributes = True
 
 class EmployeeDeleteRead(BaseModel):
-    user_id: int
-
-    class Config:
-        from_attributes = True
+    message: str
 
 class RoleCreate(BaseModel):
     role_name: str
