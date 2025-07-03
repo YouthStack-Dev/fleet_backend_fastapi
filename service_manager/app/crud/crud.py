@@ -835,14 +835,37 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         logger.error(f"Unexpected error while updating employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while updating employee.")
 
+def delete_employee(db: Session, employee_code: str, tenant_id: int):
+    try:
+        logger.info(f"Delete request received for employee_code: {employee_code} in tenant_id: {tenant_id}")
 
-def delete_employee(db: Session, employee_code, tenant_id):
-    db_employee = db.query(Employee).join(User).filter(Employee.employee_code == employee_code, User.tenant_id == tenant_id).first()
-    if not db_employee:
-        logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
-        raise HTTPException(status_code=404, detail="Employee not found.")
+        # Fetch employee with tenant check
+        db_employee = db.query(Employee).join(User).filter(
+            Employee.employee_code == employee_code,
+            User.tenant_id == tenant_id
+        ).first()
 
-    db.delete(db_employee)
-    db.commit()
-    logger.info(f"Employee {employee_code} deleted successfully.")
-    return db_employee
+        if not db_employee:
+            logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Employee not found for this tenant.")
+
+        # Delete employee
+        db.delete(db_employee)
+        db.commit()
+
+        logger.info(f"Employee {employee_code} successfully deleted for tenant {tenant_id}")
+        return {"message": f"Employee {employee_code} deleted successfully."}
+
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
+    
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while deleting employee {employee_code} for tenant {tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="An error occurred while deleting the employee.")
+
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Unexpected error while deleting employee {employee_code} for tenant {tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
