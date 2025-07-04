@@ -4,7 +4,17 @@ on:
   pull_request:
     types: [closed]
     branches:
-      - deploy
+
+      - main
+
+env:
+  AWS_REGION: ap-south-1
+
+  REPO_NAME: fleet
+
+  IMAGE_TAG: latest
+  STACK_NAME: fleet-service_manager
+
 
 jobs:
   build-and-deploy:
@@ -12,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
     - name: Checkout code
       uses: actions/checkout@v4
 
