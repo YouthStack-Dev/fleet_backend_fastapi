@@ -11,7 +11,7 @@ from app.api.routes.department import router as department_router
 from app.api.routes.employee import router as employee_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
-
+ 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create models
