@@ -55,13 +55,13 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         password: ${{ secrets.VPS_PASSWORD }}
         script: |
-        docker compose -f ~/docker-compose.prod.yml down --volumes --remove-orphans
-        docker image prune -af
-        docker volume prune -f
-        docker network prune -f
-        docker pull dheerajkumarp/fleet_service_manager:latest
-        docker compose -f ~/docker-compose.prod.yml up -d --force-recreate
-        docker system prune -af
+          docker compose -f ~/docker-compose.prod.yml down --volumes --remove-orphans
+          docker image prune -af
+          docker volume prune -f
+          docker network prune -f
+          docker pull dheerajkumarp/fleet_service_manager:latest
+          docker compose -f ~/docker-compose.prod.yml up -d --force-recreate
+          docker system prune -af
 
 #           docker pull dheerajkumarp/fleet_service_manager:latest
 #           docker compose -f ~/docker-compose.prod.yml up -d
