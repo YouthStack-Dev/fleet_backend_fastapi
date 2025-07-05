@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeesByDepartmentResponse
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
@@ -17,6 +17,14 @@ async def create_employee(
 ):
     return controller.create_employee(employee, db, token_data["tenant_id"])
 
+
+@router.get("/{department_id}", response_model=EmployeesByDepartmentResponse)
+async def get_employee(
+    department_id: str,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
+):
+    return controller.get_employee_by_department(department_id, db, token_data["tenant_id"])
 
 @router.get("/{employee_code}", response_model=EmployeeRead)
 async def get_employee(

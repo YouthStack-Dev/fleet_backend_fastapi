@@ -122,6 +122,25 @@ class EmployeeRead(EmployeeBase):
     class Config:
         from_attributes = True
 
+class EmployeeResponse(BaseModel):
+    employee_code: str
+    gender: Optional[str] = None
+    mobile_number: Optional[str] = None
+    alternate_mobile_number: Optional[str] = None
+    office: Optional[str] = None
+    special_need: Optional[str] = None
+    subscribe_via_email: Optional[bool] = None
+    subscribe_via_sms: Optional[bool] = None
+    address: Optional[str] = None
+    latitude: Optional[str] = None
+    longitude: Optional[str] = None
+    landmark: Optional[str] = None
+class EmployeesByDepartmentResponse(BaseModel):
+    department_id: int
+    tenant_id: int
+    total_employees: int
+    employees: List[EmployeeResponse]
+
 class EmployeeDeleteRead(BaseModel):
     message: str
 

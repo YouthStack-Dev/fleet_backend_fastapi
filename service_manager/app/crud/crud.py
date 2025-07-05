@@ -840,6 +840,28 @@ def get_employee(db: Session, employee_code, tenant_id):
         raise HTTPException(status_code=404, detail="Employee not found.")
     return employee
 
+def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
+    logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
+
+    employees = db.query(Employee).join(User).filter(
+        Employee.department_id == department_id,
+        User.tenant_id == tenant_id
+    ).all()
+
+    if not employees:
+        logger.warning(f"No employees found for department {department_id} and tenant {tenant_id}")
+        raise HTTPException(status_code=404, detail="No employees found for this department.")
+
+    logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
+
+    return {
+        "department_id": department_id,
+        "tenant_id": tenant_id,
+        "total_employees": len(employees),
+        "employees": employees
+    }
+
+
 def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
     try:
         logger.info(f"Updating employee with code: {employee_code} for tenant_id: {tenant_id}, payload: {employee_update.dict()}")
