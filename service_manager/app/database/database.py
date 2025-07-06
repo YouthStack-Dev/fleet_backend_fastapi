@@ -84,6 +84,9 @@ def seed_data():
                      
                      tenant_id=tenants[0].tenant_id, is_active=1),
                     
+                User(username="subadmin", email="manager@acme.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
+                     tenant_id=tenants[0].tenant_id, is_active=1),
+
                 User(username="manager", email="manager@startup.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[1].tenant_id, is_active=1),
                 User(username="driver", email="driver@medsol.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
@@ -97,6 +100,7 @@ def seed_data():
             # Create Departments
             departments = [
                 Department(tenant_id=tenants[0].tenant_id, department_name="IT", description="Technology department"),
+                Department(tenant_id=tenants[0].tenant_id, department_name="Operations", description="Operations department"),
                 Department(tenant_id=tenants[1].tenant_id, department_name="Operations", description="Operations department"),
                 Department(tenant_id=tenants[2].tenant_id, department_name="Medical", description="Medical staff department")
             ]
@@ -124,7 +128,7 @@ def seed_data():
                 Employee(
                     employee_code="sta1",
                     user_id=users[1].user_id,
-                    department_id=departments[1].department_id,
+                    department_id=departments[0].department_id,
                     gender="Female",
                     mobile_number="8123456789",
                     alternate_mobile_number=None,
@@ -175,7 +179,8 @@ def seed_data():
             # Create Roles
             roles = [
                 Role(role_name="Super Admin", description="Full system access", tenant_id=tenants[0].tenant_id),
-                Role(role_name="Fleet Manager", description="Fleet management access", tenant_id=tenants[1].tenant_id),
+                Role(role_name="Company Manager", description="Company management access", tenant_id=tenants[0].tenant_id),
+                Role(role_name="Company Manager", description="Company management access", tenant_id=tenants[1].tenant_id),
                 Role(role_name="Driver", description="Vehicle operator access", tenant_id=tenants[2].tenant_id)
             ]
             session.add_all(roles)
