@@ -28,6 +28,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://euronext.gocab.tech",
+        "http://localhost",
+        "http://localhost:8080",
+        "http://localhost:5174",
+        "http://localhost:8100",
     ],
     allow_credentials=True,
     # allow_methods=["GET", "POST", "PUT", "DELETE"],
