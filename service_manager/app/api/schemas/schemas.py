@@ -63,6 +63,11 @@ class DepartmentBase(BaseModel):
 
 class DepartmentCreate(DepartmentBase):
     pass
+class DepartmentWithCountResponse(BaseModel):
+    department_id: int
+    department_name: str
+    description: str
+    employee_count: int
 
 class DepartmentRead(DepartmentBase):
     department_id: int

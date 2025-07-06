@@ -634,21 +634,43 @@ def create_department(db, department_data, tenant_id):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail="Unexpected error occurred.")
-def get_department(db, department_id, tenant_id):
+    
+def get_departments(db, tenant_id: int, skip: int = 0, limit: int = 100):
     try:
-        department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
-        if not department:
-            raise HTTPException(status_code=404, detail="Department not found.")
-        return department
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching department.")
+        logger.info(f"Fetching departments for tenant {tenant_id} with skip={skip} and limit={limit}")
 
+        departments = db.query(Department).filter_by(tenant_id=tenant_id).offset(skip).limit(limit).all()
 
-def get_departments(db, tenant_id, skip=0, limit=100):
-    try:
-        return db.query(Department).filter_by(tenant_id=tenant_id).offset(skip).limit(limit).all()
+        if not departments:
+            logger.warning(f"No departments found for tenant {tenant_id}")
+            return []
+
+        department_list = []
+        for department in departments:
+            employee_count = db.query(Employee).join(User).filter(
+                Employee.department_id == department.department_id,
+                User.tenant_id == tenant_id
+            ).count()
+
+            department_list.append({
+                "department_id": department.department_id,
+                "department_name": department.department_name,
+                "description": department.description,
+                "employee_count": employee_count
+            })
+
+        logger.info(f"Found {len(department_list)} departments for tenant {tenant_id}")
+        return department_list
+
     except Exception as e:
+        logger.exception(f"Unexpected error while fetching departments for tenant {tenant_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching departments.")
+
+# def get_departments(db, tenant_id, skip=0, limit=100):
+#     try:
+#         return db.query(Department).filter_by(tenant_id=tenant_id).offset(skip).limit(limit).all()
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching departments.")
 
 
 def update_department(db, department_id, department, tenant_id):

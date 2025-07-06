@@ -11,6 +11,7 @@ from app.api.routes.department import router as department_router
 from app.api.routes.employee import router as employee_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
+from fastapi.middleware.cors import CORSMiddleware
  
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,6 +24,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Service Manager", lifespan=lifespan)
 # app = FastAPI(title="Service Manager")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://euronext.gocab.tech",
+        "http://localhost",
+        "http://localhost:8080",
+        "http://localhost:5174",
+        "http://localhost:8100",
+    ],
+    allow_credentials=True,
+    # allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["*"],
+    # allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["*"],
+)
 
 
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
