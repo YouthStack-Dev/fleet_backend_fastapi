@@ -10,6 +10,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.department import router as department_router
 from app.api.routes.employee import router as employee_router
 from app.api.routes.cutoff import router as cutoff_router
+from app.api.routes.shift import router as shift_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +44,7 @@ app.add_middleware(
 
 
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
+app.include_router(shift_router, prefix="/api/shifts", tags=["shifts"])
 app.include_router(cutoff_router, prefix="/api/cutoff", tags=["cutoff"])
 app.include_router(employee_router, prefix="/api/employees", tags=["employees"])
 app.include_router(department_router, prefix="/api/departments", tags=["departments"])
