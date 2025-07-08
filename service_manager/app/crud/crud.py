@@ -1,6 +1,6 @@
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff
+from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
 from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
@@ -1043,3 +1043,17 @@ def update_cutoff(db: Session, tenant_id: int, cutoff_update: CutoffUpdate):
     db.commit()
     db.refresh(cutoff)
     return cutoff
+
+def create_shift(db: Session, tenant_id: int, shift_data: ShiftCreate):
+    existing = db.query(Shift).filter_by(tenant_id=tenant_id, shift_code=shift_data.shift_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Shift code already exists for this tenant.")
+
+    db_shift = Shift(
+        tenant_id=tenant_id,
+        **shift_data.dict()
+    )
+    db.add(db_shift)
+    db.commit()
+    db.refresh(db_shift)
+    return db_shift
