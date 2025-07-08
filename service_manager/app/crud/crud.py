@@ -1057,3 +1057,16 @@ def create_shift(db: Session, tenant_id: int, shift_data: ShiftCreate):
     db.commit()
     db.refresh(db_shift)
     return db_shift
+
+def get_shifts(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> List[Shift]:
+    try:
+        return (
+            db.query(Shift)
+            .filter(Shift.tenant_id == tenant_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to fetch shifts")
