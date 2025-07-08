@@ -52,6 +52,8 @@ class Tenant(Base, TimestampMixin):
     users = relationship("User", secondary=user_tenant, back_populates="tenants")
     groups = relationship("Group", back_populates="tenant")
     roles = relationship("Role", back_populates="tenant")
+    cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
+    shifts = relationship("Shift", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -179,3 +181,61 @@ class Policy(Base):
             name='uix_policy'
         ),
     )
+
+class Cutoff(Base):
+    __tablename__ = "cutoff"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    booking_cutoff = Column(Integer, nullable=False, default=6)
+    cancellation_cutoff = Column(Integer, nullable=False, default=6)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationship to Tenant
+    tenant = relationship("Tenant", back_populates="cutoff")
+
+from sqlalchemy import Column, Integer, String, Time, Enum, Boolean, ForeignKey
+import enum
+
+class LogType(str, enum.Enum):
+    IN = "in"
+    OUT = "out"
+
+class DayOfWeek(str, enum.Enum):
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
+
+class PickupType(str, enum.Enum):
+    PICKUP = "pickup"
+    NODAL = "nodal"
+
+class GenderType(str, enum.Enum):
+    MALE = "male"
+    FEMALE = "female"
+    ANY = "any"
+
+class Shift(Base):
+    __tablename__ = "shifts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+
+    shift_code = Column(String, nullable=False)
+    log_type = Column(Enum(LogType), nullable=False)
+    shift_time = Column(Time, nullable=False)
+    day = Column(Enum(DayOfWeek), nullable=False)
+    waiting_time_minutes = Column(Integer, nullable=False)
+    pickup_type = Column(Enum(PickupType), nullable=False)
+    gender = Column(Enum(GenderType), nullable=False)
+    is_active = Column(Boolean, default=True)
+    
+    # Relationship to Tenant
+    tenant = relationship("Tenant", back_populates="shifts")
