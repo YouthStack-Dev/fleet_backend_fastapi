@@ -44,3 +44,19 @@ async def fetch_shifts(
     except Exception as e:
         logger.exception("Unexpected error while fetching shifts")
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/{shift_id}", response_model=ShiftRead)
+async def fetch_shift_by_id(
+    shift_id: int,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["shift_management.read"]))
+):
+    tenant_id = token_data["tenant_id"]
+    try:
+        shift = controller.get_shift_by_id(db, tenant_id, shift_id)
+        return shift
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Error fetching shift id={shift_id} for tenant={tenant_id}")
+        raise HTTPException(status_code=500, detail="Internal server error")
