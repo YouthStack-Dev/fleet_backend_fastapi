@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.controller.shift_controller import ShiftController
-from app.api.schemas.schemas import ShiftCreate, ShiftRead
+from app.api.schemas.schemas import ShiftCreate, ShiftRead , ShiftUpdate
 from common_utils.auth.permission_checker import PermissionChecker
 from typing import List
 import logging
@@ -59,4 +59,22 @@ async def fetch_shift_by_id(
         raise e
     except Exception as e:
         logger.exception(f"Error fetching shift id={shift_id} for tenant={tenant_id}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# app/api/routes/shift_router.py
+
+@router.put("/{shift_id}", response_model=ShiftRead)
+async def update_shift(
+    shift_id: int,
+    shift_update: ShiftUpdate,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["shift_management.update"]))
+):
+    tenant_id = token_data["tenant_id"]
+    try:
+        return controller.update_shift(db, tenant_id, shift_id, shift_update)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Error updating shift id={shift_id} for tenant={tenant_id}")
         raise HTTPException(status_code=500, detail="Internal server error")
