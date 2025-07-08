@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.controller.shift_controller import ShiftController
-from app.api.schemas.schemas import ShiftCreate, ShiftRead , ShiftUpdate
+from app.api.schemas.schemas import ShiftCreate, ShiftRead , ShiftUpdate , LogType
 from common_utils.auth.permission_checker import PermissionChecker
 from typing import List
 import logging
@@ -22,6 +22,24 @@ async def create_shift(
     tenant_id = token_data["tenant_id"]
     return controller.create_shift(db, tenant_id, shift)
 
+
+@router.get("/log-type", response_model=List[ShiftRead])
+async def get_shifts_by_log_type(
+    log_type: LogType,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["shift_management.read"])),
+    skip: int = 0,
+    limit: int = 100
+):
+    tenant_id = token_data["tenant_id"]
+    try:
+        return controller.get_shifts_by_log_type(db, tenant_id, log_type, skip, limit)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Error fetching shifts by log_type={log_type} for tenant={tenant_id}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
 @router.get("/", response_model=List[ShiftRead])
 async def fetch_shifts(
     db: Session = Depends(get_db),

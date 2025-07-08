@@ -1084,6 +1084,9 @@ def get_shift_by_id(db: Session, tenant_id: int, shift_id: int) -> Shift:
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to fetch shift")
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
     
 def update_shift(db: Session, tenant_id: int, shift_id: int, shift_update: ShiftUpdate):
     shift = db.query(Shift).filter_by(id=shift_id, tenant_id=tenant_id).first()
@@ -1100,3 +1103,30 @@ def update_shift(db: Session, tenant_id: int, shift_id: int, shift_update: Shift
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to update shift")
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
+    
+def get_shifts_by_log_type(
+    db: Session,
+    tenant_id: int,
+    log_type: LogType,
+    skip: int = 0,
+    limit: int = 100
+):
+    try:
+        base_query = db.query(Shift).filter(
+            Shift.tenant_id == tenant_id,
+            Shift.log_type == log_type
+        )
+
+
+        shifts = base_query.offset(skip).limit(limit).all()
+
+        return shifts
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to fetch shifts by log type")
+    except HTTPException as e:
+    # Allow FastAPI to handle HTTP errors directly
+        raise e
