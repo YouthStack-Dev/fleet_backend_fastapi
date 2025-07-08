@@ -1,7 +1,7 @@
 # app/controller/shift_controller.py
 
-from app.api.schemas.schemas import ShiftCreate
-from app.crud.crud import create_shift, get_shift_by_id, get_shifts
+from app.api.schemas.schemas import ShiftCreate, ShiftUpdate
+from app.crud.crud import create_shift, get_shift_by_id, get_shifts, update_shift
 from sqlalchemy.orm import Session
 
 class ShiftController:
@@ -13,3 +13,6 @@ class ShiftController:
     
     def get_shift_by_id(self, db: Session, tenant_id: int, shift_id: int):
         return get_shift_by_id(db, tenant_id, shift_id)
+    
+    def update_shift(self, db: Session, tenant_id: int, shift_id: int, shift_update: ShiftUpdate):
+        return update_shift(db, tenant_id, shift_id, shift_update)
