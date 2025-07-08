@@ -52,6 +52,7 @@ class Tenant(Base, TimestampMixin):
     users = relationship("User", secondary=user_tenant, back_populates="tenants")
     groups = relationship("Group", back_populates="tenant")
     roles = relationship("Role", back_populates="tenant")
+    cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
 
 
 class User(Base, TimestampMixin):
@@ -179,3 +180,18 @@ class Policy(Base):
             name='uix_policy'
         ),
     )
+
+class Cutoff(Base):
+    __tablename__ = "cutoff"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    booking_cutoff = Column(Integer, nullable=False, default=6)
+    cancellation_cutoff = Column(Integer, nullable=False, default=6)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationship to Tenant
+    tenant = relationship("Tenant", back_populates="cutoff")
