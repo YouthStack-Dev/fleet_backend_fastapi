@@ -311,3 +311,16 @@ class ShiftRead(ShiftBase):
 
     class Config:
         from_attributes = True
+
+class ShiftUpdate(BaseModel):
+    shift_code: Optional[str]
+    log_type: Optional[LogType]
+    shift_time: Optional[time]
+    day: Optional[DayOfWeek]
+    waiting_time_minutes: Optional[int]
+    pickup_type: Optional[PickupType]
+    gender: Optional[GenderType]
+    is_active: Optional[bool]
+
+    class Config:
+        from_attributes = True

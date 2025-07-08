@@ -1084,3 +1084,19 @@ def get_shift_by_id(db: Session, tenant_id: int, shift_id: int) -> Shift:
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to fetch shift")
+    
+def update_shift(db: Session, tenant_id: int, shift_id: int, shift_update: ShiftUpdate):
+    shift = db.query(Shift).filter_by(id=shift_id, tenant_id=tenant_id).first()
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    try:
+        for key, value in shift_update.dict(exclude_unset=True).items():
+            setattr(shift, key, value)
+
+        db.commit()
+        db.refresh(shift)
+        return shift
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update shift")
