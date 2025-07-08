@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
-from datetime import datetime
+from datetime import datetime ,time
 from typing_extensions import Literal
 
 class TenantCreate(BaseModel):
@@ -249,3 +249,78 @@ class TokenResponse(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class CutoffBase(BaseModel):
+    booking_cutoff: int = Field(..., gt=0, description="Booking must happen this many hours before shift")
+    cancellation_cutoff: int = Field(..., gt=0, description="Cancellation must happen this many hours before shift")
+
+class CutoffCreate(CutoffBase):
+    pass
+
+class CutoffUpdate(CutoffBase):
+    pass
+
+class CutoffRead(CutoffBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# app/api/schemas/shift.py
+from enum import Enum
+class LogType(str, Enum):
+    IN = "in"
+    OUT = "out"
+
+class DayOfWeek(str, Enum):
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
+
+class PickupType(str, Enum):
+    PICKUP = "pickup"
+    NODAL = "nodal"
+
+class GenderType(str, Enum):
+    MALE = "male"
+    FEMALE = "female"
+    ANY = "any"
+
+class ShiftBase(BaseModel):
+    shift_code: str = Field(..., description="Unique shift code per tenant")
+    log_type: LogType
+    shift_time: time
+    day: DayOfWeek
+    waiting_time_minutes: int
+    pickup_type: PickupType
+    gender: GenderType
+    is_active: Optional[bool] = True
+
+class ShiftCreate(ShiftBase):
+    pass
+
+class ShiftRead(ShiftBase):
+    id: int
+    tenant_id: int
+
+    class Config:
+        from_attributes = True
+
+class ShiftUpdate(BaseModel):
+    shift_code: Optional[str]
+    log_type: Optional[LogType]
+    shift_time: Optional[time]
+    day: Optional[DayOfWeek]
+    waiting_time_minutes: Optional[int]
+    pickup_type: Optional[PickupType]
+    gender: Optional[GenderType]
+    is_active: Optional[bool]
+
+    class Config:
+        from_attributes = True
