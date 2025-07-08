@@ -1130,3 +1130,16 @@ def get_shifts_by_log_type(
     except HTTPException as e:
     # Allow FastAPI to handle HTTP errors directly
         raise e
+    
+def delete_shift(db: Session, tenant_id: int, shift_id: int):
+    shift = db.query(Shift).filter_by(id=shift_id, tenant_id=tenant_id).first()
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    try:
+        db.delete(shift)  # 👈 Hard delete
+        db.commit()
+        return {"detail": f"Shift ID {shift_id} deleted successfully."}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete shift")

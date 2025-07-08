@@ -96,3 +96,18 @@ async def update_shift(
     except Exception as e:
         logger.exception(f"Error updating shift id={shift_id} for tenant={tenant_id}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.delete("/{shift_id}")
+async def delete_shift(
+    shift_id: int,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["shift_management.delete"]))
+):
+    tenant_id = token_data["tenant_id"]
+    try:
+        return controller.delete_shift(db, tenant_id, shift_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Error deleting shift id={shift_id} for tenant={tenant_id}")
+        raise HTTPException(status_code=500, detail="Internal server error")
