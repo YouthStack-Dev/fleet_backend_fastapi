@@ -1,6 +1,6 @@
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user
+from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
 from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
@@ -1009,3 +1009,64 @@ def delete_employee(db: Session, employee_code: str, tenant_id: int):
         db.rollback()
         logger.exception(f"Unexpected error while deleting employee {employee_code} for tenant {tenant_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+    
+
+# app/crud/cutoff.py
+
+def create_cutoff(db: Session, cutoff: CutoffCreate, tenant_id: int):
+    existing = db.query(Cutoff).filter_by(tenant_id=tenant_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Cutoff already exists for this tenant.")
+
+    db_cutoff = Cutoff(
+        tenant_id=tenant_id,
+        booking_cutoff=cutoff.booking_cutoff,
+        cancellation_cutoff=cutoff.cancellation_cutoff
+    )
+    db.add(db_cutoff)
+    db.commit()
+    db.refresh(db_cutoff)
+    return db_cutoff
+
+
+def get_cutoff_by_tenant(db: Session, tenant_id: int):
+    return db.query(Cutoff).filter_by(tenant_id=tenant_id).first()
+
+def update_cutoff(db: Session, tenant_id: int, cutoff_update: CutoffUpdate):
+    cutoff = get_cutoff_by_tenant(db, tenant_id)
+    if not cutoff:
+        raise HTTPException(status_code=404, detail="Cutoff not found")
+
+    for field, value in cutoff_update.dict().items():
+        setattr(cutoff, field, value)
+
+    db.commit()
+    db.refresh(cutoff)
+    return cutoff
+
+def create_shift(db: Session, tenant_id: int, shift_data: ShiftCreate):
+    existing = db.query(Shift).filter_by(tenant_id=tenant_id, shift_code=shift_data.shift_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Shift code already exists for this tenant.")
+
+    db_shift = Shift(
+        tenant_id=tenant_id,
+        **shift_data.dict()
+    )
+    db.add(db_shift)
+    db.commit()
+    db.refresh(db_shift)
+    return db_shift
+
+def get_shifts(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> List[Shift]:
+    try:
+        return (
+            db.query(Shift)
+            .filter(Shift.tenant_id == tenant_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to fetch shifts")
