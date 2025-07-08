@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 from datetime import datetime
 from typing_extensions import Literal
@@ -249,3 +249,21 @@ class TokenResponse(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class CutoffBase(BaseModel):
+    booking_cutoff: int = Field(..., gt=0, description="Booking must happen this many hours before shift")
+    cancellation_cutoff: int = Field(..., gt=0, description="Cancellation must happen this many hours before shift")
+
+class CutoffCreate(CutoffBase):
+    pass
+
+class CutoffUpdate(CutoffBase):
+    pass
+
+class CutoffRead(CutoffBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -83,6 +83,7 @@ def seed_data():
                 Module(service_id=services[0].id, name="shift_management", description="Manage shift operations"),
                 Module(service_id=services[0].id, name="manage_shift", description="Manage individual shift schedules"),
                 Module(service_id=services[0].id, name="shift_category", description="Manage shift categories"),
+                Module(service_id=services[0].id, name="cutoff", description="Manage cutoff times for bookings and cancellations"),
 
             ]
             session.add_all(modules)
@@ -242,6 +243,9 @@ def seed_data():
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[16].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[17].id,
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
                 Policy(tenant_id=tenants[1].tenant_id, service_id=services[1].id, module_id=modules[2].id,
