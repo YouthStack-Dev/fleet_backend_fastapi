@@ -1070,3 +1070,17 @@ def get_shifts(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> 
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to fetch shifts")
+    
+def get_shift_by_id(db: Session, tenant_id: int, shift_id: int) -> Shift:
+    try:
+        shift = (
+            db.query(Shift)
+            .filter(Shift.tenant_id == tenant_id, Shift.id == shift_id)
+            .first()
+        )
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+        return shift
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to fetch shift")
