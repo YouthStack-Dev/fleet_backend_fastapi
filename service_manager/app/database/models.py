@@ -54,6 +54,7 @@ class Tenant(Base, TimestampMixin):
     roles = relationship("Role", back_populates="tenant")
     cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
     shifts = relationship("Shift", back_populates="tenant")
+    vendors = relationship("Vendor", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -239,3 +240,20 @@ class Shift(Base):
     
     # Relationship to Tenant
     tenant = relationship("Tenant", back_populates="shifts")
+
+class Vendor(Base):
+    __tablename__ = "vendors"
+
+    vendor_id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+    vendor_name = Column(String, nullable=False)
+    contact_person = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationship to Tenant
+    tenant = relationship("Tenant", back_populates="vendors")
