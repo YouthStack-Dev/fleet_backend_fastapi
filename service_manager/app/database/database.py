@@ -387,17 +387,16 @@ def seed_data():
                 Module(service_id=services[0].id, name="driver_management", description="Manage drivers"), #8
                 Module(service_id=services[0].id, name="vehicle_management", description="Manage vehicles"), #9
                 Module(service_id=services[0].id, name="vehicle_type_management", description="Manage vehicle types"), #10
-                Module(service_id=services[0].id, name="driver_management", description="Manage drivers"), #11
-                Module(service_id=services[0].id, name="vendor_management", description="Manage vendors"), #12
-                Module(service_id=services[0].id, name="admin_dashboard", description="View system dashboards"), #13
-                Module(service_id=services[0].id, name="company_dashboard", description="View company dashboards"), #14
-                Module(service_id=services[0].id, name="routing_management", description="Manage routing operations"), #15
-                Module(service_id=services[0].id, name="tracking_management", description="Manage tracking operations"), #16
-                Module(service_id=services[0].id, name="booking_management", description="Manage bookings"), #17
-                Module(service_id=services[0].id, name="shift_management", description="Manage shift operations"), #18
+                Module(service_id=services[0].id, name="vendor_management", description="Manage vendors"), #11
+                Module(service_id=services[0].id, name="admin_dashboard", description="View system dashboards"), #12
+                Module(service_id=services[0].id, name="company_dashboard", description="View company dashboards"), #13
+                Module(service_id=services[0].id, name="routing_management", description="Manage routing operations"), #14
+                Module(service_id=services[0].id, name="tracking_management", description="Manage tracking operations"), #15
+                Module(service_id=services[0].id, name="booking_management", description="Manage bookings"), #16
+                Module(service_id=services[0].id, name="shift_management", description="Manage shift operations"), #17
                 # Module(service_id=services[0].id, name="manage_shift", description="Manage individual shift schedules"),
-                Module(service_id=services[0].id, name="shift_category", description="Manage shift categories"), #19
-                Module(service_id=services[0].id, name="cutoff", description="Manage cutoff times for bookings and cancellations"), #20
+                Module(service_id=services[0].id, name="shift_category", description="Manage shift categories"), #18
+                Module(service_id=services[0].id, name="cutoff", description="Manage cutoff times for bookings and cancellations"), #19
 
             ]
             session.add_all(modules)
@@ -561,19 +560,18 @@ def seed_data():
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[17].id,
                       can_view=True, can_create=True, can_edit=True, can_delete=True,
                       group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[18].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+                Policy(tenant_id=tenants[0].tenant_id, service_id=services[0].id, module_id=modules[19].id,
+                      can_view=True, can_create=True, can_edit=True, can_delete=True,
+                      group_id=groups[0].group_id, condition={"ip_range": "10.0.0.0/8"}),
+
+            
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[1].id,
                     can_view=True, can_create=True, can_edit=False, can_delete=False,
                     group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
-
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[2].id,
-                    can_view=True, can_create=True, can_edit=False, can_delete=False,
-                    group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
-
-                Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[10].id,
-                    can_view=True, can_create=True, can_edit=False, can_delete=False,
-                    group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
-
-                Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[12].id,
                     can_view=True, can_create=True, can_edit=False, can_delete=False,
                     group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
 
@@ -581,17 +579,10 @@ def seed_data():
                     can_view=True, can_create=True, can_edit=False, can_delete=False,
                     group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
 
-                Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[14].id,
-                    can_view=True, can_create=True, can_edit=False, can_delete=False,
-                    group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
-
                 Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[15].id,
                     can_view=True, can_create=True, can_edit=False, can_delete=False,
                     group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
 
-                Policy(tenant_id=tenants[0].tenant_id, service_id=services[1].id, module_id=modules[16].id,
-                    can_view=True, can_create=True, can_edit=False, can_delete=False,
-                    group_id=groups[1].group_id, condition={"ip_range": "10.0.0.0/8"}),
 
             ]
             session.add_all(policies)
