@@ -321,6 +321,33 @@ class ShiftUpdate(BaseModel):
     pickup_type: Optional[PickupType]
     gender: Optional[GenderType]
     is_active: Optional[bool]
+    class Config:
+        from_attributes = True
+
+class VendorBase(BaseModel):
+    vendor_name: str
+    contact_person: Optional[str]
+    phone_number: Optional[str]
+    email: Optional[str]
+    address: Optional[str]
+
+class VendorCreate(VendorBase):
+    pass
+
+class VendorUpdate(BaseModel):
+    vendor_name: Optional[str]
+    contact_person: Optional[str]
+    phone_number: Optional[str]
+    email: Optional[str]
+    address: Optional[str]
+    is_active: Optional[bool]
+
+class VendorOut(VendorBase):
+    vendor_id: int
+    tenant_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
