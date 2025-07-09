@@ -376,24 +376,28 @@ def seed_data():
 
             # Create Modules
             modules = [
-                Module(service_id=services[0].id, name="user_management", description="Manage user accounts"),
-                Module(service_id=services[0].id, name="department_management", description="Manage departments"),
-                Module(service_id=services[0].id, name="employee_management", description="Manage employees"),
-                Module(service_id=services[0].id, name="group_management", description="Manage user groups"),
-                Module(service_id=services[0].id, name="mapping_management", description="Manage mappings between users, groups, and roles"),
-                Module(service_id=services[0].id, name="policy_management", description="Manage policies"),
-                Module(service_id=services[0].id, name="service_management", description="Manage services"),
-                Module(service_id=services[0].id, name="tenant_management", description="Manage tenants"),
-                Module(service_id=services[0].id, name="driver_management", description="Manage drivers"),
-                Module(service_id=services[0].id, name="vendor_management", description="Manage vendors"),
-                Module(service_id=services[0].id, name="dashboard", description="View system dashboards"),
-                Module(service_id=services[0].id, name="routing_management", description="Manage routing operations"),
-                Module(service_id=services[0].id, name="tracking_management", description="Manage tracking operations"),
-                Module(service_id=services[0].id, name="booking_management", description="Manage bookings"),
-                Module(service_id=services[0].id, name="shift_management", description="Manage shift operations"),
-                Module(service_id=services[0].id, name="manage_shift", description="Manage individual shift schedules"),
-                Module(service_id=services[0].id, name="shift_category", description="Manage shift categories"),
-                Module(service_id=services[0].id, name="cutoff", description="Manage cutoff times for bookings and cancellations"),
+                Module(service_id=services[0].id, name="user_management", description="Manage user accounts"),  #0
+                Module(service_id=services[0].id, name="department_management", description="Manage departments"), #1
+                Module(service_id=services[0].id, name="employee_management", description="Manage employees"), #2
+                Module(service_id=services[0].id, name="group_management", description="Manage user groups"), #3
+                Module(service_id=services[0].id, name="mapping_management", description="Manage mappings between users, groups, and roles"), #4
+                Module(service_id=services[0].id, name="policy_management", description="Manage policies"), #5
+                Module(service_id=services[0].id, name="service_management", description="Manage services"), #6
+                Module(service_id=services[0].id, name="tenant_management", description="Manage tenants"), #7
+                Module(service_id=services[0].id, name="driver_management", description="Manage drivers"), #8
+                Module(service_id=services[0].id, name="vehicle_management", description="Manage vehicles"), #9
+                Module(service_id=services[0].id, name="vehicle_type_management", description="Manage vehicle types"), #10
+                Module(service_id=services[0].id, name="driver_management", description="Manage drivers"), #11
+                Module(service_id=services[0].id, name="vendor_management", description="Manage vendors"), #12
+                Module(service_id=services[0].id, name="admin_dashboard", description="View system dashboards"), #13
+                Module(service_id=services[0].id, name="company_dashboard", description="View company dashboards"), #14
+                Module(service_id=services[0].id, name="routing_management", description="Manage routing operations"), #15
+                Module(service_id=services[0].id, name="tracking_management", description="Manage tracking operations"), #16
+                Module(service_id=services[0].id, name="booking_management", description="Manage bookings"), #17
+                Module(service_id=services[0].id, name="shift_management", description="Manage shift operations"), #18
+                # Module(service_id=services[0].id, name="manage_shift", description="Manage individual shift schedules"),
+                Module(service_id=services[0].id, name="shift_category", description="Manage shift categories"), #19
+                Module(service_id=services[0].id, name="cutoff", description="Manage cutoff times for bookings and cancellations"), #20
 
             ]
             session.add_all(modules)
