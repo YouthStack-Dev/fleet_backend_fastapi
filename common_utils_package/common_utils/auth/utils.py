@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 # Configuration
 SECRET_KEY = "your-secret-key"  
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 1 day
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 def create_access_token(
