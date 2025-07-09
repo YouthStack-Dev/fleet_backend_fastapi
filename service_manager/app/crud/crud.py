@@ -1143,3 +1143,109 @@ def delete_shift(db: Session, tenant_id: int, shift_id: int):
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete shift")
+
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+from app.database.models import Vendor
+
+def create_vendor(db: Session, vendor_data, tenant_id: int):
+    logger.info(f"Creating vendor: {vendor_data.vendor_name} for tenant_id: {tenant_id}")
+    
+    existing = db.query(Vendor).filter_by(vendor_name=vendor_data.vendor_name, tenant_id=tenant_id).first()
+    if existing:
+        logger.warning(f"Vendor '{vendor_data.vendor_name}' already exists for tenant_id: {tenant_id}")
+        raise HTTPException(status_code=400, detail="Vendor with this name already exists.")
+
+    new_vendor = Vendor(
+        tenant_id=tenant_id,
+        vendor_name=vendor_data.vendor_name,
+        contact_person=vendor_data.contact_person,
+        phone_number=vendor_data.phone_number,
+        email=vendor_data.email,
+        address=vendor_data.address,
+    )
+    db.add(new_vendor)
+    db.commit()
+    db.refresh(new_vendor)
+
+    logger.info(f"Vendor created successfully: {new_vendor.vendor_id}")
+    return new_vendor
+
+
+def get_vendors(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> List[Vendor]:
+    logger.info(f"Fetching vendors for tenant_id: {tenant_id}, skip: {skip}, limit: {limit}")
+    vendors = (
+        db.query(Vendor)
+        .filter(Vendor.tenant_id == tenant_id)
+        .order_by(Vendor.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    logger.info(f"Found {len(vendors)} vendors")
+    return vendors
+
+
+def get_vendor_by_id(db: Session, tenant_id: int, vendor_id: int) -> Vendor:
+    logger.info(f"Fetching vendor_id: {vendor_id} for tenant_id: {tenant_id}")
+    
+    vendor = (
+        db.query(Vendor)
+        .filter(Vendor.tenant_id == tenant_id, Vendor.vendor_id == vendor_id)
+        .first()
+    )
+
+    if not vendor:
+        logger.error(f"Vendor with ID {vendor_id} not found for tenant_id: {tenant_id}")
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    logger.info(f"Vendor found: {vendor.vendor_id}")
+    return vendor
+
+
+def update_vendor(db: Session, tenant_id: int, vendor_id: int, update_data):
+    logger.info(f"Updating vendor_id: {vendor_id} for tenant_id: {tenant_id}")
+    
+    vendor = (
+        db.query(Vendor)
+        .filter(Vendor.vendor_id == vendor_id, Vendor.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not vendor:
+        logger.error(f"Vendor with ID {vendor_id} not found for tenant_id: {tenant_id}")
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    updates = update_data.dict(exclude_unset=True)
+    logger.info(f"Fields to update: {updates}")
+    
+    for key, value in updates.items():
+        setattr(vendor, key, value)
+
+    db.commit()
+    db.refresh(vendor)
+
+    logger.info(f"Vendor updated successfully: {vendor.vendor_id}")
+    return vendor
+def delete_vendor(db: Session, tenant_id: int, vendor_id: int, user_id: int):
+    vendor = (
+        db.query(Vendor)
+        .filter(Vendor.vendor_id == vendor_id, Vendor.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    db.delete(vendor)
+    db.commit()
+    logger.info(f"Vendor {vendor_id} deleted successfully for tenant {tenant_id} by user {user_id}")
+    return {"message": "Vendor deleted successfully"}
+
+

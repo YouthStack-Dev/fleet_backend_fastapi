@@ -339,7 +339,7 @@ def init_db():
 def seed_data():
     session = SessionLocal()
     try:
-        from app.database.models import Tenant, User, Group, Role, Service, Module, Policy, user_tenant, group_user, group_role, user_role, Department, Employee , Cutoff , Shift
+        from app.database.models import Tenant, User, Group, Role, Service, Module, Policy, user_tenant, group_user, group_role, user_role, Department, Employee , Cutoff , Shift , Vendor
 
         # Check if data already exists
         if session.query(Tenant).first():
@@ -651,6 +651,28 @@ def seed_data():
                 )
             ]
             session.add_all(shifts)
+            session.flush()
+            sample_vendors = [
+                Vendor(
+                    tenant_id=tenants[0].tenant_id,
+                    vendor_name="ABC Transport",
+                    contact_person="John Doe",
+                    phone_number="9876543210",
+                    email="abc@example.com",
+                    address="123, MG Road, Bengaluru",
+                    is_active=True
+                ),
+                Vendor(
+                    tenant_id=tenants[0].tenant_id,
+                    vendor_name="SpeedLogistics",
+                    contact_person="Priya Sharma",
+                    phone_number="9876543211",
+                    email="priya@speedlogistics.com",
+                    address="45, Silk Board, Bengaluru",
+                    is_active=True
+                )
+            ]
+            session.add_all(sample_vendors)
             session.flush()
 
             session.commit()
