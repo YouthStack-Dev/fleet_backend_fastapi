@@ -351,3 +351,35 @@ class VendorOut(VendorBase):
 
     class Config:
         from_attributes = True
+
+class FuelType(str, Enum):
+    PETROL = "petrol"
+    DIESEL = "diesel"
+    ELECTRIC = "electric"
+    CNG = "cng"
+    HYBRID = "hybrid"
+
+class VehicleTypeBase(BaseModel):
+    name: str = Field(..., description="Name of the vehicle type")
+    description: Optional[str] = Field(None, description="Optional description")
+    capacity: int = Field(..., ge=1, description="Seating capacity")
+    fuel_type: FuelType = Field(..., description="Type of fuel")
+    vendor_id: int = Field(..., gt=0, description="Linked vendor ID")
+
+class VehicleTypeCreate(VehicleTypeBase):
+    pass
+
+class VehicleTypeUpdate(BaseModel):
+    name: Optional[str]
+    description: Optional[str]
+    capacity: Optional[int]
+    fuel_type: Optional[FuelType]
+    vendor_id: Optional[int]
+
+class VehicleTypeOut(VehicleTypeBase):
+    vehicle_type_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

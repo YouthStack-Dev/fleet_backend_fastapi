@@ -743,9 +743,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.database.models import Employee, User, Tenant, Department
 
-import logging
 
-logger = logging.getLogger(__name__)
 
 
 def create_employee(db: Session, employee, tenant_id):
@@ -1248,4 +1246,19 @@ def delete_vendor(db: Session, tenant_id: int, vendor_id: int, user_id: int):
     logger.info(f"Vendor {vendor_id} deleted successfully for tenant {tenant_id} by user {user_id}")
     return {"message": "Vendor deleted successfully"}
 
+from app.database.models import VehicleType
+from app.api.schemas.schemas import VehicleTypeCreate
+def create_vehicle_type(db: Session, payload: VehicleTypeCreate):
+    try:
+        db_vehicle_type = VehicleType(**payload.dict())
+        db.add(db_vehicle_type)
+        db.commit()
+        db.refresh(db_vehicle_type)
 
+        logger.info(f"VehicleType created: {db_vehicle_type.name} (Vendor: {db_vehicle_type.vendor_id})")
+        return db_vehicle_type
+
+    except Exception as e:
+        db.rollback()
+        logger.exception("Error creating vehicle type")
+        raise HTTPException(status_code=500, detail="Failed to create vehicle type")
