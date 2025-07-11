@@ -257,3 +257,28 @@ class Vendor(Base):
 
     # Relationship to Tenant
     tenant = relationship("Tenant", back_populates="vendors")
+    vehicle_types = relationship("VehicleType", back_populates="vendor", cascade="all, delete-orphan")
+
+class FuelType(str, enum.Enum):
+    PETROL = "petrol"
+    DIESEL = "diesel"
+    ELECTRIC = "electric"
+    CNG = "cng"
+    HYBRID = "hybrid"
+
+class VehicleType(Base):
+    __tablename__ = "vehicle_types"
+
+    vehicle_type_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    capacity = Column(Integer, nullable=False)
+    fuel_type = Column(Enum(FuelType), nullable=False)
+
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    vendor = relationship("Vendor", back_populates="vehicle_types")
