@@ -743,9 +743,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.database.models import Employee, User, Tenant, Department
 
-import logging
 
-logger = logging.getLogger(__name__)
 
 
 def create_employee(db: Session, employee, tenant_id):
@@ -1248,4 +1246,96 @@ def delete_vendor(db: Session, tenant_id: int, vendor_id: int, user_id: int):
     logger.info(f"Vendor {vendor_id} deleted successfully for tenant {tenant_id} by user {user_id}")
     return {"message": "Vendor deleted successfully"}
 
+from app.database.models import VehicleType
+from app.api.schemas.schemas import VehicleTypeCreate
+def create_vehicle_type(db: Session, payload: VehicleTypeCreate):
+    try:
+        db_vehicle_type = VehicleType(**payload.dict())
+        db.add(db_vehicle_type)
+        db.commit()
+        db.refresh(db_vehicle_type)
 
+        logger.info(f"VehicleType created: {db_vehicle_type.name} (Vendor: {db_vehicle_type.vendor_id})")
+        return db_vehicle_type
+
+    except Exception as e:
+        db.rollback()
+        logger.exception("Error creating vehicle type")
+        raise HTTPException(status_code=500, detail="Failed to create vehicle type")
+    
+
+def get_vehicle_type_by_id(db: Session, vehicle_type_id: int):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+        return vehicle_type
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching vehicle type with id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to fetch vehicle type")
+
+def get_vehicle_types_filtered(
+    db: Session,
+    tenant_id: int,
+    vendor_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100
+):
+    try:
+        query = db.query(VehicleType).filter(VehicleType.vendor.has(tenant_id=tenant_id))
+
+        if vendor_id:
+            query = query.filter(VehicleType.vendor_id == vendor_id)
+
+        return query.offset(skip).limit(limit).all()
+
+    except Exception as e:
+        logger.exception("Failed to fetch vehicle types (filtered)")
+        raise HTTPException(status_code=500, detail="Unable to fetch vehicle types")
+
+# app/crud/vehicle_type_crud.py
+
+def update_vehicle_type(db: Session, vehicle_type_id: int, payload: VehicleTypeUpdate):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+
+        for key, value in payload.dict(exclude_unset=True).items():
+            setattr(vehicle_type, key, value)
+
+        db.commit()
+        db.refresh(vehicle_type)
+
+        logger.info(f"VehicleType updated: {vehicle_type_id}")
+        return vehicle_type
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error updating vehicle type id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to update vehicle type")
+
+# app/crud/vehicle_type_crud.py
+
+def delete_vehicle_type(db: Session, vehicle_type_id: int):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+
+        db.delete(vehicle_type)
+        db.commit()
+
+        logger.info(f"VehicleType deleted: id={vehicle_type_id}")
+        return {"message": "Vehicle type deleted successfully", "vehicle_type_id": vehicle_type_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error deleting vehicle type id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to delete vehicle type")
