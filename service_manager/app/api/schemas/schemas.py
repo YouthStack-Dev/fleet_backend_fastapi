@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
-from datetime import datetime ,time
+from datetime import date, datetime ,time
 from typing_extensions import Literal
 
 class TenantCreate(BaseModel):
@@ -123,12 +123,17 @@ class EmployeeUpdate(BaseModel):
 class EmployeeRead(EmployeeBase):
     employee_code: str
     user_id: int
+    username: str
+    email: str
 
     class Config:
         from_attributes = True
 
 class EmployeeResponse(BaseModel):
     employee_code: str
+    username: str
+    user_id: int
+    email: str
     gender: Optional[str] = None
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
@@ -390,3 +395,43 @@ class VehicleTypeUpdate(BaseModel):
     capacity: Optional[int]
     fuel_type: Optional[FuelType]
     vendor_id: Optional[int]
+class DriverBase(BaseModel):
+    username: str
+    email: str
+    hashed_password: str  # hashed on frontend or before insert
+
+    city: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = None  # male, female, other
+
+    alternate_mobile_number: Optional[str] = None
+    permanent_address: Optional[str] = None
+    current_address: Optional[str] = None
+    bgv_status: Optional[str] = "Pending"  # default = Pending
+    bgv_date: Optional[date] = None
+
+    police_doc_url: Optional[str] = None
+    license_doc_url: Optional[str] = None
+    photo_url: Optional[str] = None
+
+class DriverCreate(DriverBase):
+    pass
+class DriverRead(DriverBase):
+    driver_id: int
+    user_id: int
+    tenant_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DriverOut(DriverBase):
+    driver_id: int
+    user_id: int
+    tenant_id: int
+    is_active: bool
+
+    class Config:
+        from_attributes = True

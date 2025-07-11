@@ -1,6 +1,6 @@
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import Session
-from app.database.models import Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
+from app.database.models import Driver, Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
 from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
@@ -853,12 +853,52 @@ def create_employee(db: Session, employee, tenant_id):
         logger.error(f"Unexpected error while creating employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating employee.")
 
+import traceback
+
 def get_employee(db: Session, employee_code, tenant_id):
-    employee = db.query(Employee).join(User).filter(Employee.employee_code == employee_code, User.tenant_id == tenant_id).first()
-    if not employee:
-        logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
-        raise HTTPException(status_code=404, detail="Employee not found.")
-    return employee
+    try:
+        logger.info(f"Fetching employee with employee_code: {employee_code} under tenant_id: {tenant_id}")
+        
+        employees = (
+            db.query(Employee)
+            .join(Employee.user)
+            .filter(Employee.employee_code == employee_code)
+            .filter(User.tenant_id == tenant_id)
+            .first()
+        )
+
+        if not employees:
+            logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Employee not found.")
+
+        logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.user.username}, email: {employees.user.email}")
+        # return employees
+        return {
+            "employee_code": employees.employee_code,
+            "gender": employees.gender,
+            "mobile_number": employees.mobile_number,
+            "alternate_mobile_number": employees.alternate_mobile_number,
+            "office": employees.office,
+            "special_need": employees.special_need,
+            "subscribe_via_email": employees.subscribe_via_email,
+            "subscribe_via_sms": employees.subscribe_via_sms,
+            "address": employees.address,
+            "latitude": employees.latitude,
+            "longitude": employees.longitude,
+            "landmark": employees.landmark,
+            "department_id": employees.department_id,
+            "user_id": employees.user.user_id,
+            "username": employees.user.username,
+            "email": employees.user.email
+        }
+    except HTTPException as e:
+        # Allow FastAPI to handle HTTP errors directly
+        logger.warning(f"HTTPException while fetching employee: {str(e.detail)}")
+        raise e
+    except Exception as e:
+        traceback.print_exc()
+        logger.error(f"Exception while fetching employee: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error during query execution")
 
 def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
@@ -874,11 +914,31 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
 
     logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
 
+    employee_list = []
+    for emp in employees:
+        employee_list.append({
+            "user_id": emp.user.user_id,
+            "employee_code": emp.employee_code,
+            "username": emp.user.username,
+            "email": emp.user.email,
+            "gender": emp.gender,
+            "mobile_number": emp.mobile_number,
+            "alternate_mobile_number": emp.alternate_mobile_number,
+            "office": emp.office,
+            "special_need": emp.special_need,
+            "subscribe_via_email": emp.subscribe_via_email,
+            "subscribe_via_sms": emp.subscribe_via_sms,
+            "address": emp.address,
+            "latitude": emp.latitude,
+            "longitude": emp.longitude,
+            "landmark": emp.landmark
+        })
+
     return {
         "department_id": department_id,
         "tenant_id": tenant_id,
-        "total_employees": len(employees),
-        "employees": employees
+        "total_employees": len(employee_list),
+        "employees": employee_list
     }
 
 
@@ -1339,3 +1399,86 @@ def delete_vehicle_type(db: Session, vehicle_type_id: int):
         db.rollback()
         logger.exception(f"Error deleting vehicle type id={vehicle_type_id}")
         raise HTTPException(status_code=500, detail="Failed to delete vehicle type")
+
+def create_driver(db: Session, driver: DriverCreate, tenant_id: int):
+    try:
+        logger.info(f"Creating driver for tenant_id={tenant_id} with payload={driver.dict()}")
+
+        if not driver.username.strip():
+            raise HTTPException(status_code=422, detail="Username is required.")
+        if not driver.email.strip():
+            raise HTTPException(status_code=422, detail="Email is required.")
+        if not driver.hashed_password.strip():
+            raise HTTPException(status_code=422, detail="Password is required.")
+
+        db_user = db.query(User).filter_by(email=driver.email, tenant_id=tenant_id).first()
+
+        if db_user:
+            logger.info(f"User with email {driver.email} already exists: user_id={db_user.user_id}")
+            existing_driver = db.query(Driver).filter_by(user_id=db_user.user_id).first()
+            if existing_driver:
+                raise HTTPException(status_code=409, detail="User already registered as a driver.")
+            user_id = db_user.user_id
+        else:
+            if db.query(User).filter_by(username=driver.username, tenant_id=tenant_id).first():
+                raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
+
+            new_user = User(
+                username=driver.username,
+                email=driver.email,
+                hashed_password=driver.hashed_password,
+                tenant_id=tenant_id,
+                is_active=1
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            user_id = new_user.user_id
+            logger.info(f"Created new user with user_id={user_id}")
+
+        tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        new_driver = Driver(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            city=driver.city,
+            date_of_birth=driver.date_of_birth,
+            gender=driver.gender,
+            alternate_mobile_number=driver.alternate_mobile_number,
+            permanent_address=driver.permanent_address,
+            current_address=driver.current_address,
+            bgv_status=driver.bgv_status or "Pending",
+            bgv_date=driver.bgv_date,
+            police_doc_url=driver.police_doc_url,
+            license_doc_url=driver.license_doc_url,
+            photo_url=driver.photo_url,
+            is_active=True
+        )
+
+        db.add(new_driver)
+        db.commit()
+        db.refresh(new_driver)
+        logger.info(f"Driver created successfully with driver_id={new_driver.driver_id}")
+        return new_driver
+
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError: {str(e)}")
+        raise HTTPException(status_code=400, detail="Database integrity error while creating driver.")
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"SQLAlchemyError: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while creating driver.")
+
+    except HTTPException as e:
+        db.rollback()
+        logger.warning(f"HTTPException: {e.detail}")
+        raise e
+
+    except Exception as e:
+        db.rollback()
+        logger.exception("Unexpected error while creating driver")
+        raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
