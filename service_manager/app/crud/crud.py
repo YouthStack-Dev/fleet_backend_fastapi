@@ -1262,3 +1262,35 @@ def create_vehicle_type(db: Session, payload: VehicleTypeCreate):
         db.rollback()
         logger.exception("Error creating vehicle type")
         raise HTTPException(status_code=500, detail="Failed to create vehicle type")
+    
+
+def get_vehicle_type_by_id(db: Session, vehicle_type_id: int):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+        return vehicle_type
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching vehicle type with id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to fetch vehicle type")
+
+def get_vehicle_types_filtered(
+    db: Session,
+    tenant_id: int,
+    vendor_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100
+):
+    try:
+        query = db.query(VehicleType).filter(VehicleType.vendor.has(tenant_id=tenant_id))
+
+        if vendor_id:
+            query = query.filter(VehicleType.vendor_id == vendor_id)
+
+        return query.offset(skip).limit(limit).all()
+
+    except Exception as e:
+        logger.exception("Failed to fetch vehicle types (filtered)")
+        raise HTTPException(status_code=500, detail="Unable to fetch vehicle types")
