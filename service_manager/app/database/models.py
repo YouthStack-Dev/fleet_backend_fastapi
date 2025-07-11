@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Boolean, Column, String, Integer, ForeignKey, DateTime, JSON, UniqueConstraint, Table
+    Boolean, Column, String, Integer, ForeignKey, DateTime, JSON, UniqueConstraint, Table, Date
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -55,6 +55,8 @@ class Tenant(Base, TimestampMixin):
     cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
     shifts = relationship("Shift", back_populates="tenant")
     vendors = relationship("Vendor", back_populates="tenant")
+    drivers = relationship("Driver", back_populates="tenant")
+    vehicles = relationship("Vehicle", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -71,6 +73,7 @@ class User(Base, TimestampMixin):
     groups = relationship("Group", secondary=group_user, back_populates="users")
     roles = relationship("Role", secondary=user_role, back_populates="users")
     employee = relationship("Employee", back_populates="user", uselist=False)
+    driver = relationship("Driver", back_populates="user", uselist=False)
 class Department(Base, TimestampMixin):
     __tablename__ = 'departments'
 
@@ -258,6 +261,7 @@ class Vendor(Base):
     # Relationship to Tenant
     tenant = relationship("Tenant", back_populates="vendors")
     vehicle_types = relationship("VehicleType", back_populates="vendor", cascade="all, delete-orphan")
+    vehicles = relationship("Vehicle", back_populates="vendor", cascade="all, delete-orphan")
 
 class FuelType(str, enum.Enum):
     PETROL = "petrol"
@@ -282,3 +286,62 @@ class VehicleType(Base):
 
     # Relationships
     vendor = relationship("Vendor", back_populates="vehicle_types")
+    vehicles = relationship("Vehicle", back_populates="vehicle_type")
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    vehicle_id = Column(Integer, primary_key=True, index=True)
+    
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+    driver_id = Column(Integer, ForeignKey("drivers.driver_id", ondelete="SET NULL"), nullable=True)
+    vehicle_type_id = Column(Integer, ForeignKey("vehicle_types.vehicle_type_id", ondelete="SET NULL"), nullable=True)
+
+    vehicle_code = Column(String, nullable=False, unique=True)  # app-managed code
+    reg_number = Column(String, nullable=False, unique=True)    # physical vehicle registration number
+
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    vendor = relationship("Vendor", back_populates="vehicles")
+    driver = relationship("Driver", back_populates="vehicles")
+    vehicle_type = relationship("VehicleType", back_populates="vehicles")
+    tenant = relationship("Tenant", back_populates="vehicles")
+    driver = relationship("Driver", back_populates="vehicles", uselist=False)
+
+class Driver(Base):
+    __tablename__ = "drivers"
+
+    driver_id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+
+    city = Column(String(100), nullable=True)
+    date_of_birth = Column(Date, nullable=True)
+    gender = Column(String(10), nullable=True)  # e.g., male/female/other
+
+    alternate_mobile_number = Column(String(20), nullable=True)
+    permanent_address = Column(String(255), nullable=True)
+    current_address = Column(String(255), nullable=True)
+    bgv_status = Column(String(50), default="Pending")  # e.g., Pending, Cleared, Rejected
+
+    bgv_date = Column(Date, nullable=True)
+
+    police_doc_url = Column(String(255), nullable=True)
+    license_doc_url = Column(String(255), nullable=True)
+    photo_url = Column(String(255), nullable=True)
+
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    user = relationship("User", back_populates="driver")
+    tenant = relationship("Tenant", back_populates="drivers")
+    vehicles = relationship("Vehicle", back_populates="driver")
