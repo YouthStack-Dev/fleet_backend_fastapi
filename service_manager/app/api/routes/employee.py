@@ -18,7 +18,7 @@ async def create_employee(
     return controller.create_employee(employee, db, token_data["tenant_id"])
 
 
-@router.get("/{department_id}", response_model=EmployeesByDepartmentResponse)
+@router.get("/department/{department_id}", response_model=EmployeesByDepartmentResponse)
 async def get_employee(
     department_id: str,
     db: Session = Depends(get_db),
@@ -32,6 +32,9 @@ async def get_employee(
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
 ):
+    # return controller.get_employee(employee_code, db, token_data["tenant_id"])
+    print("🔵 Inside ROUTER")
+    print(f"🔵 employee_code: {employee_code}, tenant_id: {token_data['tenant_id']}")
     return controller.get_employee(employee_code, db, token_data["tenant_id"])
 
 
