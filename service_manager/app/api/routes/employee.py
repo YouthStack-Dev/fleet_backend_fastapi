@@ -32,6 +32,8 @@ async def get_employee(
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
 ):
+    # return controller.get_employee(employee_code, db, token_data["tenant_id"])
+    print("🔵 Inside ROUTER")
     return controller.get_employee(employee_code, db, token_data["tenant_id"])
 
 

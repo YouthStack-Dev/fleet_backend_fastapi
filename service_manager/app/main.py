@@ -13,6 +13,7 @@ from app.api.routes.cutoff import router as cutoff_router
 from app.api.routes.shift import router as shift_router
 from app.api.routes.vendor import router as vendor_router
 from app.api.routes.vehicle_type import router as vehicle_type_router
+from app.api.routes.driver import router as driver_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(driver_router, prefix="/api/drivers", tags=["drivers"])
 app.include_router(vehicle_type_router, prefix="/api/vehicle_types", tags=["vehicle_types"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
 app.include_router(vendor_router, prefix="/api/vendors", tags=["vendors"])
