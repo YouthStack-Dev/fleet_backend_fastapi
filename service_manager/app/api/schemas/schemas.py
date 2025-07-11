@@ -123,12 +123,17 @@ class EmployeeUpdate(BaseModel):
 class EmployeeRead(EmployeeBase):
     employee_code: str
     user_id: int
+    username: str
+    email: str
 
     class Config:
         from_attributes = True
 
 class EmployeeResponse(BaseModel):
     employee_code: str
+    username: str
+    user_id: int
+    email: str
     gender: Optional[str] = None
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
