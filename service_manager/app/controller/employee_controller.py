@@ -26,7 +26,7 @@ class EmployeeController:
             return get_employee_service(db, employee_code, tenant_id)
         except HTTPException as e:
             logger.warning(f"HTTPException: {str(e.detail)}")
-            raise e
+            raise e  # ✅ Re-raise the same HTTPException (404 or 409 etc.)
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Unhandled exception in controller: {str(e)}")

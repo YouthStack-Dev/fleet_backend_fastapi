@@ -859,28 +859,46 @@ def get_employee(db: Session, employee_code, tenant_id):
     try:
         logger.info(f"Fetching employee with employee_code: {employee_code} under tenant_id: {tenant_id}")
         
-        emp = (
+        employees = (
             db.query(Employee)
             .join(Employee.user)
-            .filter(Employee.employee_code == "EMP001")
-            .filter(User.tenant_id == 1)
+            .filter(Employee.employee_code == employee_code)
+            .filter(User.tenant_id == tenant_id)
             .first()
         )
 
-        print("Employee:", emp)
+        if not employees:
+            logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Employee not found.")
 
-        logger.info(f"Employee fetched: {emp}")
+        logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.user.username}, email: {employees.user.email}")
+        # return employees
+        return {
+            "employee_code": employees.employee_code,
+            "gender": employees.gender,
+            "mobile_number": employees.mobile_number,
+            "alternate_mobile_number": employees.alternate_mobile_number,
+            "office": employees.office,
+            "special_need": employees.special_need,
+            "subscribe_via_email": employees.subscribe_via_email,
+            "subscribe_via_sms": employees.subscribe_via_sms,
+            "address": employees.address,
+            "latitude": employees.latitude,
+            "longitude": employees.longitude,
+            "landmark": employees.landmark,
+            "department_id": employees.department_id,
+            "user_id": employees.user.user_id,
+            "username": employees.user.username,
+            "email": employees.user.email
+        }
+    except HTTPException as e:
+        # Allow FastAPI to handle HTTP errors directly
+        logger.warning(f"HTTPException while fetching employee: {str(e.detail)}")
+        raise e
     except Exception as e:
-        traceback.print_exc()  # 🔥 THIS is what prints the real Python error
-        logger.error(f"Exception: {str(e)}")
+        traceback.print_exc()
+        logger.error(f"Exception while fetching employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Error during query execution")
-
-    if not emp:
-        logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
-        raise HTTPException(status_code=404, detail="Employee not found.")
-
-    return emp
-
 
 def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
@@ -896,11 +914,31 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
 
     logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
 
+    employee_list = []
+    for emp in employees:
+        employee_list.append({
+            "user_id": emp.user.user_id,
+            "employee_code": emp.employee_code,
+            "username": emp.user.username,
+            "email": emp.user.email,
+            "gender": emp.gender,
+            "mobile_number": emp.mobile_number,
+            "alternate_mobile_number": emp.alternate_mobile_number,
+            "office": emp.office,
+            "special_need": emp.special_need,
+            "subscribe_via_email": emp.subscribe_via_email,
+            "subscribe_via_sms": emp.subscribe_via_sms,
+            "address": emp.address,
+            "latitude": emp.latitude,
+            "longitude": emp.longitude,
+            "landmark": emp.landmark
+        })
+
     return {
         "department_id": department_id,
         "tenant_id": tenant_id,
-        "total_employees": len(employees),
-        "employees": employees
+        "total_employees": len(employee_list),
+        "employees": employee_list
     }
 
 
