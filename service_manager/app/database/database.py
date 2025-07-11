@@ -674,6 +674,40 @@ def seed_data():
             ]
             session.add_all(sample_vendors)
             session.flush()
+            from app.database.models import VehicleType, FuelType
+
+            vehicle_types = [
+                VehicleType(
+                    name="Swift Dzire",
+                    description="Compact sedan for city rides",
+                    capacity=4,
+                    fuel_type=FuelType.PETROL,
+                    vendor_id=1
+                ),
+                VehicleType(
+                    name="Eeco Cargo",
+                    description="Cargo van for delivery",
+                    capacity=2,
+                    fuel_type=FuelType.CNG,
+                    vendor_id=1
+                ),
+                VehicleType(
+                    name="Innova Crysta",
+                    description="Spacious MPV for long trips",
+                    capacity=6,
+                    fuel_type=FuelType.DIESEL,
+                    vendor_id=2
+                ),
+                VehicleType(
+                    name="Tata Nexon EV",
+                    description="Electric SUV for local travel",
+                    capacity=5,
+                    fuel_type=FuelType.ELECTRIC,
+                    vendor_id=2
+                ),
+            ]
+            session.add_all(vehicle_types)
+            session.flush()
 
             session.commit()
             print("Sample data seeded successfully.")
