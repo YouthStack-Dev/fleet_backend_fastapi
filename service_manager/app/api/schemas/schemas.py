@@ -383,3 +383,10 @@ class VehicleTypeOut(VehicleTypeBase):
 
     class Config:
         from_attributes = True
+
+class VehicleTypeUpdate(BaseModel):
+    name: Optional[str]
+    description: Optional[str]
+    capacity: Optional[int]
+    fuel_type: Optional[FuelType]
+    vendor_id: Optional[int]

@@ -1294,3 +1294,48 @@ def get_vehicle_types_filtered(
     except Exception as e:
         logger.exception("Failed to fetch vehicle types (filtered)")
         raise HTTPException(status_code=500, detail="Unable to fetch vehicle types")
+
+# app/crud/vehicle_type_crud.py
+
+def update_vehicle_type(db: Session, vehicle_type_id: int, payload: VehicleTypeUpdate):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+
+        for key, value in payload.dict(exclude_unset=True).items():
+            setattr(vehicle_type, key, value)
+
+        db.commit()
+        db.refresh(vehicle_type)
+
+        logger.info(f"VehicleType updated: {vehicle_type_id}")
+        return vehicle_type
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error updating vehicle type id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to update vehicle type")
+
+# app/crud/vehicle_type_crud.py
+
+def delete_vehicle_type(db: Session, vehicle_type_id: int):
+    try:
+        vehicle_type = db.query(VehicleType).filter_by(vehicle_type_id=vehicle_type_id).first()
+        if not vehicle_type:
+            raise HTTPException(status_code=404, detail="Vehicle type not found")
+
+        db.delete(vehicle_type)
+        db.commit()
+
+        logger.info(f"VehicleType deleted: id={vehicle_type_id}")
+        return {"message": "Vehicle type deleted successfully", "vehicle_type_id": vehicle_type_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error deleting vehicle type id={vehicle_type_id}")
+        raise HTTPException(status_code=500, detail="Failed to delete vehicle type")
