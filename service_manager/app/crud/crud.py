@@ -831,7 +831,24 @@ def create_employee(db: Session, employee, tenant_id):
         db.commit()
         db.refresh(db_employee)
         logger.info(f"Employee created successfully with ID: {db_employee.employee_code}")
-        return db_employee
+        return {
+            "employee_code": db_employee.employee_code,
+            "department_id": db_employee.department_id,
+            "user_id": db_employee.user_id,
+            "username": db_employee.user.username,
+            "email": db_employee.user.email,
+            "gender": db_employee.gender,
+            "mobile_number": db_employee.mobile_number,
+            "alternate_mobile_number": db_employee.alternate_mobile_number,
+            "office": db_employee.office,
+            "special_need": db_employee.special_need,
+            "subscribe_via_email": db_employee.subscribe_via_email,
+            "subscribe_via_sms": db_employee.subscribe_via_sms,
+            "address": db_employee.address,
+            "latitude": db_employee.latitude,
+            "longitude": db_employee.longitude,
+            "landmark": db_employee.landmark,
+        }
 
     except IntegrityError as e:
         db.rollback()
@@ -1011,7 +1028,24 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         db.refresh(db_employee)
 
         logger.info(f"Employee {employee_code} updated successfully for tenant {tenant_id}")
-        return db_employee
+        return {
+            "employee_code": db_employee.employee_code,
+            "department_id": db_employee.department_id,
+            "user_id": db_employee.user_id,
+            "username": db_employee.user.username,
+            "email": db_employee.user.email,
+            "gender": db_employee.gender,
+            "mobile_number": db_employee.mobile_number,
+            "alternate_mobile_number": db_employee.alternate_mobile_number,
+            "office": db_employee.office,
+            "special_need": db_employee.special_need,
+            "subscribe_via_email": db_employee.subscribe_via_email,
+            "subscribe_via_sms": db_employee.subscribe_via_sms,
+            "address": db_employee.address,
+            "latitude": db_employee.latitude,
+            "longitude": db_employee.longitude,
+            "landmark": db_employee.landmark,
+        }
     
     except IntegrityError as e:
         db.rollback()
