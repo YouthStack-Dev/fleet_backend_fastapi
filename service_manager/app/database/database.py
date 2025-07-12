@@ -632,7 +632,7 @@ def seed_data():
                     shift_code="MORNING_IN",
                     log_type=LogType.IN,
                     shift_time=time(9, 0),
-                    day=DayOfWeek.MONDAY,
+                    day="{monday,wednesday,friday}",
                     waiting_time_minutes=10,
                     pickup_type=PickupType.PICKUP,
                     gender=GenderType.ANY,
@@ -643,7 +643,7 @@ def seed_data():
                     shift_code="EVENING_OUT",
                     log_type=LogType.OUT,
                     shift_time=time(18, 0),
-                    day=DayOfWeek.MONDAY,
+                    day="{monday,wednesday}",
                     waiting_time_minutes=5,
                     pickup_type=PickupType.NODAL,
                     gender=GenderType.ANY,
@@ -709,108 +709,108 @@ def seed_data():
             session.add_all(vehicle_types)
             session.flush()
 
-            from app.database.models import Driver
-            from datetime import date
+            # from app.database.models import Driver
+            # from datetime import date
 
-            drivers = [
-                Driver(
-                    user_id=users[0].user_id,  # admin@acme.com
-                    tenant_id=tenants[0].tenant_id,
-                    city="Bangalore",
-                    date_of_birth=date(1990, 4, 15),
-                    gender="Male",
-                    alternate_mobile_number="9876543211",
-                    permanent_address="Acme Colony, Tech Park",
-                    current_address="Acme Staff Quarters, Bangalore",
-                    bgv_status="Cleared",
-                    bgv_date=date(2024, 12, 1),
-                    police_doc_url="https://docs.example.com/police_acm.pdf",
-                    license_doc_url="https://docs.example.com/license_acm.pdf",
-                    photo_url="https://photos.example.com/driver_acm.jpg",
-                    is_active=True
-                ),
-                Driver(
-                    user_id=users[1].user_id,  # manager@neru.com
-                    tenant_id=tenants[0].tenant_id,
-                    city="Hyderabad",
-                    date_of_birth=date(1988, 9, 23),
-                    gender="Female",
-                    alternate_mobile_number="8123456790",
-                    permanent_address="Startup Avenue, Hyderabad",
-                    current_address="Company Hostel, Hyderabad",
-                    bgv_status="Pending",
-                    police_doc_url="https://docs.example.com/police_sta.pdf",
-                    license_doc_url="https://docs.example.com/license_sta.pdf",
-                    photo_url="https://photos.example.com/driver_sta.jpg",
-                    is_active=True
-                ),
-                Driver(
-                    user_id=users[2].user_id,  # driver@neru.com
-                    tenant_id=tenants[0].tenant_id,
-                    city="Mumbai",
-                    date_of_birth=date(1992, 2, 10),
-                    gender="Male",
-                    alternate_mobile_number="7894561234",
-                    permanent_address="Med Street, Mumbai",
-                    current_address="Med Hostel, Mumbai",
-                    bgv_status="Cleared",
-                    bgv_date=date(2024, 11, 15),
-                    police_doc_url="https://docs.example.com/police_med.pdf",
-                    license_doc_url="https://docs.example.com/license_med.pdf",
-                    photo_url="https://photos.example.com/driver_med.jpg",
-                    is_active=True
-                )
-            ]
+            # drivers = [
+            #     Driver(
+            #         user_id=users[0].user_id,  # admin@acme.com
+            #         tenant_id=tenants[0].tenant_id,
+            #         city="Bangalore",
+            #         date_of_birth=date(1990, 4, 15),
+            #         gender="Male",
+            #         alternate_mobile_number="9876543211",
+            #         permanent_address="Acme Colony, Tech Park",
+            #         current_address="Acme Staff Quarters, Bangalore",
+            #         bgv_status="Cleared",
+            #         bgv_date=date(2024, 12, 1),
+            #         police_doc_url="https://docs.example.com/police_acm.pdf",
+            #         license_doc_url="https://docs.example.com/license_acm.pdf",
+            #         photo_url="https://photos.example.com/driver_acm.jpg",
+            #         is_active=True
+            #     ),
+            #     Driver(
+            #         user_id=users[1].user_id,  # manager@neru.com
+            #         tenant_id=tenants[0].tenant_id,
+            #         city="Hyderabad",
+            #         date_of_birth=date(1988, 9, 23),
+            #         gender="Female",
+            #         alternate_mobile_number="8123456790",
+            #         permanent_address="Startup Avenue, Hyderabad",
+            #         current_address="Company Hostel, Hyderabad",
+            #         bgv_status="Pending",
+            #         police_doc_url="https://docs.example.com/police_sta.pdf",
+            #         license_doc_url="https://docs.example.com/license_sta.pdf",
+            #         photo_url="https://photos.example.com/driver_sta.jpg",
+            #         is_active=True
+            #     ),
+            #     Driver(
+            #         user_id=users[2].user_id,  # driver@neru.com
+            #         tenant_id=tenants[0].tenant_id,
+            #         city="Mumbai",
+            #         date_of_birth=date(1992, 2, 10),
+            #         gender="Male",
+            #         alternate_mobile_number="7894561234",
+            #         permanent_address="Med Street, Mumbai",
+            #         current_address="Med Hostel, Mumbai",
+            #         bgv_status="Cleared",
+            #         bgv_date=date(2024, 11, 15),
+            #         police_doc_url="https://docs.example.com/police_med.pdf",
+            #         license_doc_url="https://docs.example.com/license_med.pdf",
+            #         photo_url="https://photos.example.com/driver_med.jpg",
+            #         is_active=True
+            #     )
+            # ]
 
-            session.add_all(drivers)
-            session.flush()
+            # session.add_all(drivers)
+            # session.flush()
 
-            from app.database.models import Vehicle
+            # from app.database.models import Vehicle
 
-            vehicles = [
-                # Vehicles for Vendor 1 (ABC Transport)
-                Vehicle(
-                    tenant_id=tenants[0].tenant_id,
-                    vendor_id=sample_vendors[0].vendor_id,
-                    driver_id=drivers[0].driver_id,
-                    vehicle_type_id=vehicle_types[0].vehicle_type_id,  # Swift Dzire
-                    vehicle_code="ABC001",
-                    reg_number="KA01AB1234",
-                    is_active=True
-                ),
-                Vehicle(
-                    tenant_id=tenants[0].tenant_id,
-                    vendor_id=sample_vendors[0].vendor_id,
-                    driver_id=drivers[1].driver_id,
-                    vehicle_type_id=vehicle_types[1].vehicle_type_id,  # Eeco Cargo
-                    vehicle_code="ABC002",
-                    reg_number="KA01AB5678",
-                    is_active=True
-                ),
+            # vehicles = [
+            #     # Vehicles for Vendor 1 (ABC Transport)
+            #     Vehicle(
+            #         tenant_id=tenants[0].tenant_id,
+            #         vendor_id=sample_vendors[0].vendor_id,
+            #         driver_id=drivers[0].driver_id,
+            #         vehicle_type_id=vehicle_types[0].vehicle_type_id,  # Swift Dzire
+            #         vehicle_code="ABC001",
+            #         reg_number="KA01AB1234",
+            #         is_active=True
+            #     ),
+            #     Vehicle(
+            #         tenant_id=tenants[0].tenant_id,
+            #         vendor_id=sample_vendors[0].vendor_id,
+            #         driver_id=drivers[1].driver_id,
+            #         vehicle_type_id=vehicle_types[1].vehicle_type_id,  # Eeco Cargo
+            #         vehicle_code="ABC002",
+            #         reg_number="KA01AB5678",
+            #         is_active=True
+            #     ),
 
-                # Vehicles for Vendor 2 (SpeedLogistics)
-                Vehicle(
-                    tenant_id=tenants[0].tenant_id,
-                    vendor_id=sample_vendors[1].vendor_id,
-                    driver_id=drivers[2].driver_id,
-                    vehicle_type_id=vehicle_types[2].vehicle_type_id,  # Innova Crysta
-                    vehicle_code="SPD001",
-                    reg_number="KA02CD1234",
-                    is_active=True
-                ),
-                Vehicle(
-                    tenant_id=tenants[0].tenant_id,
-                    vendor_id=sample_vendors[1].vendor_id,
-                    driver_id=drivers[0].driver_id,
-                    vehicle_type_id=vehicle_types[3].vehicle_type_id,  # Tata Nexon EV
-                    vehicle_code="SPD002",
-                    reg_number="KA02CD5678",
-                    is_active=True
-                )
-            ]
+            #     # Vehicles for Vendor 2 (SpeedLogistics)
+            #     Vehicle(
+            #         tenant_id=tenants[0].tenant_id,
+            #         vendor_id=sample_vendors[1].vendor_id,
+            #         driver_id=drivers[2].driver_id,
+            #         vehicle_type_id=vehicle_types[2].vehicle_type_id,  # Innova Crysta
+            #         vehicle_code="SPD001",
+            #         reg_number="KA02CD1234",
+            #         is_active=True
+            #     ),
+            #     Vehicle(
+            #         tenant_id=tenants[0].tenant_id,
+            #         vendor_id=sample_vendors[1].vendor_id,
+            #         driver_id=drivers[0].driver_id,
+            #         vehicle_type_id=vehicle_types[3].vehicle_type_id,  # Tata Nexon EV
+            #         vehicle_code="SPD002",
+            #         reg_number="KA02CD5678",
+            #         is_active=True
+            #     )
+            # ]
 
-            session.add_all(vehicles)
-            session.flush()
+            # session.add_all(vehicles)
+            # session.flush()
 
             session.commit()
             print("Sample data seeded successfully.")
