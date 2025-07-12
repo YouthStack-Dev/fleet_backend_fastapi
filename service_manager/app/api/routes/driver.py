@@ -16,9 +16,9 @@ async def create_driver(
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
-    tenant_id = token_data["tenant_id"]
+    # tenant_id = token_data["tenant_id"]
     try:
-        return controller.create_driver(db, driver, tenant_id)
+        return controller.create_driver(db, driver)
     except HTTPException as e:
         raise e
     except Exception as e:
