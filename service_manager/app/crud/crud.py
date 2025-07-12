@@ -1141,14 +1141,24 @@ def create_shift(db: Session, tenant_id: int, shift_data: ShiftCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Shift code already exists for this tenant.")
 
+    # Convert list of days to comma-separated string
     db_shift = Shift(
         tenant_id=tenant_id,
-        **shift_data.dict()
+        shift_code=shift_data.shift_code,
+        log_type=shift_data.log_type,
+        shift_time=shift_data.shift_time,
+        day=",".join(shift_data.day),  # <-- Important!
+        waiting_time_minutes=shift_data.waiting_time_minutes,
+        pickup_type=shift_data.pickup_type,
+        gender=shift_data.gender,
+        is_active=shift_data.is_active
     )
+
     db.add(db_shift)
     db.commit()
     db.refresh(db_shift)
     return db_shift
+
 
 def get_shifts(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> List[Shift]:
     try:
@@ -1434,9 +1444,9 @@ def delete_vehicle_type(db: Session, vehicle_type_id: int):
         logger.exception(f"Error deleting vehicle type id={vehicle_type_id}")
         raise HTTPException(status_code=500, detail="Failed to delete vehicle type")
 
-def create_driver(db: Session, driver: DriverCreate, tenant_id: int):
+def create_driver(db: Session, driver: DriverCreate, vendor_id: int):
     try:
-        logger.info(f"Creating driver for tenant_id={tenant_id} with payload={driver.dict()}")
+        logger.info(f"Creating driver for vendor_id={vendor_id} with payload={driver.dict()}")
 
         if not driver.username.strip():
             raise HTTPException(status_code=422, detail="Username is required.")
@@ -1445,18 +1455,30 @@ def create_driver(db: Session, driver: DriverCreate, tenant_id: int):
         if not driver.hashed_password.strip():
             raise HTTPException(status_code=422, detail="Password is required.")
 
-        db_user = db.query(User).filter_by(email=driver.email, tenant_id=tenant_id).first()
+        # Step 1: Validate vendor existence
+        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found.")
+
+        tenant_id = vendor.tenant_id  # Extract tenant_id from vendor
+
+        # Step 2: Check if user exists by email or phone
+        db_user = db.query(User).filter(
+            or_(
+                User.email == driver.email,
+                User.username == driver.username
+            )
+        ).first()
 
         if db_user:
-            logger.info(f"User with email {driver.email} already exists: user_id={db_user.user_id}")
+            logger.info(f"User already exists: user_id={db_user.user_id}, email={db_user.email}")
             existing_driver = db.query(Driver).filter_by(user_id=db_user.user_id).first()
             if existing_driver:
                 raise HTTPException(status_code=409, detail="User already registered as a driver.")
             user_id = db_user.user_id
         else:
-            if db.query(User).filter_by(username=driver.username, tenant_id=tenant_id).first():
-                raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
-
+            # Step 3: Create new user
+            logger.info(f"Creating new user for driver: {driver.email}")
             new_user = User(
                 username=driver.username,
                 email=driver.email,
@@ -1468,15 +1490,12 @@ def create_driver(db: Session, driver: DriverCreate, tenant_id: int):
             db.commit()
             db.refresh(new_user)
             user_id = new_user.user_id
-            logger.info(f"Created new user with user_id={user_id}")
+            logger.info(f"New user created with user_id={user_id}")
 
-        tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
-        if not tenant:
-            raise HTTPException(status_code=404, detail="Tenant not found")
-
+        # Step 4: Create the Driver
         new_driver = Driver(
             user_id=user_id,
-            tenant_id=tenant_id,
+            vendor_id=vendor_id,
             city=driver.city,
             date_of_birth=driver.date_of_birth,
             gender=driver.gender,
@@ -1490,21 +1509,21 @@ def create_driver(db: Session, driver: DriverCreate, tenant_id: int):
             photo_url=driver.photo_url,
             is_active=True
         )
-
         db.add(new_driver)
         db.commit()
         db.refresh(new_driver)
+
         logger.info(f"Driver created successfully with driver_id={new_driver.driver_id}")
         return new_driver
 
     except IntegrityError as e:
         db.rollback()
-        logger.error(f"IntegrityError: {str(e)}")
-        raise HTTPException(status_code=400, detail="Database integrity error while creating driver.")
+        logger.error(f"IntegrityError while creating driver: {str(e.orig)}")
+        raise HTTPException(status_code=400, detail="Integrity error while creating driver.")
 
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"SQLAlchemyError: {str(e)}")
+        logger.error(f"SQLAlchemyError while creating driver: {str(e)}")
         raise HTTPException(status_code=500, detail="Database error while creating driver.")
 
     except HTTPException as e:

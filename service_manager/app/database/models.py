@@ -55,7 +55,6 @@ class Tenant(Base, TimestampMixin):
     cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
     shifts = relationship("Shift", back_populates="tenant")
     vendors = relationship("Vendor", back_populates="tenant")
-    drivers = relationship("Driver", back_populates="tenant")
     vehicles = relationship("Vehicle", back_populates="tenant")
 
 
@@ -235,7 +234,7 @@ class Shift(Base):
     shift_code = Column(String, nullable=False)
     log_type = Column(Enum(LogType), nullable=False)
     shift_time = Column(Time, nullable=False)
-    day = Column(Enum(DayOfWeek), nullable=False)
+    day = Column(String, nullable=False)
     waiting_time_minutes = Column(Integer, nullable=False)
     pickup_type = Column(Enum(PickupType), nullable=False)
     gender = Column(Enum(GenderType), nullable=False)
@@ -262,6 +261,7 @@ class Vendor(Base):
     tenant = relationship("Tenant", back_populates="vendors")
     vehicle_types = relationship("VehicleType", back_populates="vendor", cascade="all, delete-orphan")
     vehicles = relationship("Vehicle", back_populates="vendor", cascade="all, delete-orphan")
+    drivers = relationship("Driver", back_populates="vendor", cascade="all, delete-orphan")
 
 class FuelType(str, enum.Enum):
     PETROL = "petrol"
@@ -319,7 +319,7 @@ class Driver(Base):
     driver_id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
 
     city = Column(String(100), nullable=True)
     date_of_birth = Column(Date, nullable=True)
@@ -343,5 +343,5 @@ class Driver(Base):
 
     # Relationships
     user = relationship("User", back_populates="driver")
-    tenant = relationship("Tenant", back_populates="drivers")
+    vendor = relationship("Vendor", back_populates="drivers")
     vehicles = relationship("Vehicle", back_populates="driver")
