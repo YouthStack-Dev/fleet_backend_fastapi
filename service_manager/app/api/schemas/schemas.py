@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict
 from datetime import date, datetime ,time
 from typing_extensions import Literal
@@ -301,12 +301,20 @@ class ShiftBase(BaseModel):
     shift_code: str = Field(..., description="Unique shift code per tenant")
     log_type: LogType
     shift_time: time
-    day: DayOfWeek
+    day: List[DayOfWeek] 
     waiting_time_minutes: int
     pickup_type: PickupType
     gender: GenderType
     is_active: Optional[bool] = True
+    @validator("day", pre=True)
+    def parse_day_list(cls, value):
+        if isinstance(value, str):
+            # Remove braces and split, strip extra spaces
+            return [v.strip().lower().replace("{", "").replace("}", "") for v in value.split(",")]
+        return value
 
+    class Config:
+        from_attributes = True
 class ShiftCreate(ShiftBase):
     pass
 
@@ -321,11 +329,17 @@ class ShiftUpdate(BaseModel):
     shift_code: Optional[str]
     log_type: Optional[LogType]
     shift_time: Optional[time]
-    day: Optional[DayOfWeek]
+    day: Optional[List[DayOfWeek]]
     waiting_time_minutes: Optional[int]
     pickup_type: Optional[PickupType]
     gender: Optional[GenderType]
     is_active: Optional[bool]
+    @validator("day", pre=True)
+    def parse_day_list(cls, value):
+        if isinstance(value, str):
+            # Remove braces and split, strip extra spaces
+            return [v.strip().lower().replace("{", "").replace("}", "") for v in value.split(",")]
+        return value
     class Config:
         from_attributes = True
 
@@ -419,7 +433,7 @@ class DriverCreate(DriverBase):
 class DriverRead(DriverBase):
     driver_id: int
     user_id: int
-    tenant_id: int
+    vendor_id: int
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -430,7 +444,7 @@ class DriverRead(DriverBase):
 class DriverOut(DriverBase):
     driver_id: int
     user_id: int
-    tenant_id: int
+    vendor_id: int
     is_active: bool
 
     class Config:
