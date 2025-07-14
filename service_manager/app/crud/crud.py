@@ -1280,18 +1280,26 @@ def create_vendor(db: Session, vendor_data, tenant_id: int):
     return new_vendor
 
 
-def get_vendors(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> List[Vendor]:
-    logger.info(f"Fetching vendors for tenant_id: {tenant_id}, skip: {skip}, limit: {limit}")
-    vendors = (
-        db.query(Vendor)
-        .filter(Vendor.tenant_id == tenant_id)
-        .order_by(Vendor.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    logger.info(f"Found {len(vendors)} vendors")
-    return vendors
+def get_vendors(db: Session, tenant_id: int, skip: int, limit: int, is_active: Optional[bool]) -> List[Vendor]:
+    try:
+        logger.info(f"[SERVICE] Fetching vendors for tenant_id={tenant_id}, is_active={is_active}")
+        query = db.query(Vendor).filter(Vendor.tenant_id == tenant_id)
+
+        if is_active is not None:
+            query = query.filter(Vendor.is_active == is_active)
+
+        vendors = (
+            query.order_by(Vendor.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+        logger.info(f"[SERVICE] Found {len(vendors)} vendors")
+        return vendors
+    except Exception as ex:
+        logger.exception("[SERVICE] Error querying vendors from DB")
+        raise
 
 
 def get_vendor_by_id(db: Session, tenant_id: int, vendor_id: int) -> Vendor:
