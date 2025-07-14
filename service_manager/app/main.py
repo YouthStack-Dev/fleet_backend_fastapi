@@ -38,6 +38,7 @@ app.add_middleware(
         "http://localhost:8080",
         "http://localhost:5174",
         "http://localhost:8100",
+        "http://api.gocab.tech",
     ],
     allow_credentials=True,
     # allow_methods=["GET", "POST", "PUT", "DELETE"],
