@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.controller.vendor_controller import VendorController
 from app.database.database import get_db
 from app.api.schemas.schemas import VendorCreate, VendorOut, VendorUpdate
@@ -47,20 +47,21 @@ async def create_vendor(
 async def get_vendors(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=1000),
+    is_active: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["vendor_management.read"]))
 ):
     tenant_id = token_data["tenant_id"]
-    logger.info(f"[READ] Fetching vendors for tenant_id: {tenant_id}, skip: {skip}, limit: {limit}")
+    logger.info(f"[READ] Fetching vendors for tenant_id={tenant_id}, skip={skip}, limit={limit}, is_active={is_active}")
 
     try:
-        result = controller.get_vendors(db, tenant_id, skip, limit)
-        logger.info(f"[READ] Retrieved {len(result)} vendors for tenant_id: {tenant_id}")
-        return result
-    except HTTPException as e:
-        logger.warning(f"[READ] HTTPException: {e.detail}")
-        raise e
-    except Exception as e:
+        vendors = controller.get_vendors(db, tenant_id, skip, limit, is_active)
+        logger.info(f"[READ] Retrieved {len(vendors)} vendors for tenant_id={tenant_id}")
+        return vendors
+    except HTTPException as http_ex:
+        logger.warning(f"[READ] HTTPException: {http_ex.detail}")
+        raise http_ex
+    except Exception as ex:
         logger.exception("[READ] Unexpected error while fetching vendors")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
