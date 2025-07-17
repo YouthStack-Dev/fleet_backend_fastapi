@@ -98,7 +98,9 @@ class Employee(Base, TimestampMixin):
     mobile_number = Column(String(15))
     alternate_mobile_number = Column(String(15))
     office = Column(String(255))
-    special_need = Column(String(255))
+    special_need = Column(String, nullable=True)  # Enum recommended for future
+    special_need_start_date = Column(Date, nullable=True)
+    special_need_end_date = Column(Date, nullable=True)
     subscribe_via_email = Column(Boolean, default=False)
     subscribe_via_sms = Column(Boolean, default=False)
     address = Column(String(500))
