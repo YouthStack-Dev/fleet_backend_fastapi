@@ -92,6 +92,8 @@ class EmployeeBase(BaseModel):
     alternate_mobile_number: Optional[str]
     office: str
     special_need: Optional[str]
+    special_need_start_date: Optional[date] = None
+    special_need_end_date: Optional[date] = None
     subscribe_via_email: bool
     subscribe_via_sms: bool
     address: str
@@ -112,6 +114,8 @@ class EmployeeUpdate(BaseModel):
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
     special_need: Optional[str] = None
+    special_need_start_date: Optional[date] = None
+    special_need_end_date: Optional[date] = None
     subscribe_via_email: Optional[bool] = None
     subscribe_via_sms: Optional[bool] = None
     address: Optional[str] = None
@@ -139,6 +143,8 @@ class EmployeeResponse(BaseModel):
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
     special_need: Optional[str] = None
+    special_need_start_date: Optional[date] = None
+    special_need_end_date: Optional[date] = None
     subscribe_via_email: Optional[bool] = None
     subscribe_via_sms: Optional[bool] = None
     address: Optional[str] = None
