@@ -66,7 +66,7 @@ class User(Base, TimestampMixin):
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)  # Stores hashed password
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
 
     tenants = relationship("Tenant", secondary=user_tenant, back_populates="users")
     groups = relationship("Group", secondary=group_user, back_populates="users")
