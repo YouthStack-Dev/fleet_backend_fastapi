@@ -750,21 +750,60 @@ def create_employee(db: Session, employee, tenant_id):
     try:
         logger.info(f"Creating employee for tenant_id: {tenant_id}, payload: {employee.dict()}")
 
+        # --------- Required field validations ---------
         if not employee.username or not employee.username.strip():
             logger.warning("Missing username in payload")
             raise HTTPException(status_code=422, detail="Username is required.")
+
         if not employee.employee_code or not employee.employee_code.strip():
             logger.warning("Missing employee_code in payload")
             raise HTTPException(status_code=422, detail="Employee code is required.")
+
         if not employee.email or not employee.email.strip():
             logger.warning("Missing email in payload")
             raise HTTPException(status_code=422, detail="Email is required.")
+
         if not employee.mobile_number or not employee.mobile_number.strip():
             logger.warning("Missing mobile_number in payload")
             raise HTTPException(status_code=422, detail="Mobile number is required.")
+        # --------- Validate special_need logic ---------
+        allowed_special_needs = ['pregnancy', 'others', 'none', None]
+        special_need = employee.special_need.lower() if employee.special_need else None
 
-        db_user = db.query(User).filter_by(email=employee.email, tenant_id=tenant_id).first()
+        if special_need not in allowed_special_needs:
+            logger.warning(f"Invalid special_need value: {employee.special_need}")
+            raise HTTPException(status_code=422, detail="Invalid special_need. Allowed values are: pregnancy, others, none.")
 
+        # Normalize 'none' to None
+        if special_need == 'none':
+            special_need = None
+
+        if special_need:
+            if not employee.special_need_start_date or not employee.special_need_end_date:
+                logger.warning("special_need is provided but start/end dates are missing.")
+                raise HTTPException(status_code=422, detail="special_need_start_date and special_need_end_date are required.")
+
+            if employee.special_need_start_date > employee.special_need_end_date:
+                logger.warning("special_need_start_date is after special_need_end_date.")
+                raise HTTPException(status_code=422, detail="special_need_start_date must be before special_need_end_date.")
+        else:
+            employee.special_need_start_date = None
+            employee.special_need_end_date = None
+
+
+        # --------- Uniqueness checks ---------
+        existing_emp_code = db.query(Employee).filter_by(employee_code=employee.employee_code).first()
+        if existing_emp_code:
+            logger.warning(f"Employee code {employee.employee_code} already exists.")
+            raise HTTPException(status_code=409, detail="Employee code already exists.")
+
+        existing_mobile = db.query(Employee).filter_by(mobile_number=employee.mobile_number.strip()).first()
+        if existing_mobile:
+            logger.warning(f"Mobile number {employee.mobile_number} already exists.")
+            raise HTTPException(status_code=409, detail="Mobile number already exists.")
+
+        # --------- Check or create user ---------
+        db_user = db.query(User).filter_by(email=employee.email.strip(), tenant_id=tenant_id).first()
         if db_user:
             logger.info(f"User with email {employee.email} already exists, user_id: {db_user.user_id}")
             existing_employee = db.query(Employee).filter_by(user_id=db_user.user_id).first()
@@ -773,24 +812,25 @@ def create_employee(db: Session, employee, tenant_id):
                 raise HTTPException(status_code=409, detail="User is already an employee.")
             user_id = db_user.user_id
         else:
-            existing_username = db.query(User).filter_by(username=employee.username, tenant_id=tenant_id).first()
+            existing_username = db.query(User).filter_by(username=employee.username.strip(), tenant_id=tenant_id).first()
             if existing_username:
                 logger.warning(f"Username {employee.username} already exists for tenant {tenant_id}")
                 raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
 
             logger.info(f"Creating new user: {employee.username}, email: {employee.email}")
             new_user = User(
-                username=employee.username,
-                email=employee.email,
+                username=employee.username.strip(),
+                email=employee.email.strip(),
                 hashed_password=employee.hashed_password,
                 tenant_id=tenant_id,
-                is_active=1
+                is_active=True
             )
             db.add(new_user)
             db.commit()
             db.refresh(new_user)
             user_id = new_user.user_id
 
+        # --------- Validate tenant and department ---------
         tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
         if not tenant:
             logger.error(f"Tenant not found with tenant_id: {tenant_id}")
@@ -801,6 +841,7 @@ def create_employee(db: Session, employee, tenant_id):
             logger.error(f"Department {employee.department_id} not found for tenant {tenant_id}")
             raise HTTPException(status_code=404, detail="Department not found for this tenant.")
 
+        # --------- Validate coordinates ---------
         try:
             if employee.latitude:
                 float(employee.latitude)
@@ -810,8 +851,9 @@ def create_employee(db: Session, employee, tenant_id):
             logger.warning("Invalid latitude or longitude provided.")
             raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
 
+        # --------- Create employee ---------
         db_employee = Employee(
-            employee_code=employee.employee_code,
+            employee_code=employee.employee_code.strip(),
             user_id=user_id,
             department_id=employee.department_id,
             gender=employee.gender,
@@ -819,6 +861,8 @@ def create_employee(db: Session, employee, tenant_id):
             alternate_mobile_number=employee.alternate_mobile_number,
             office=employee.office,
             special_need=employee.special_need,
+            special_need_start_date=employee.special_need_start_date,
+            special_need_end_date=employee.special_need_end_date,
             subscribe_via_email=employee.subscribe_via_email,
             subscribe_via_sms=employee.subscribe_via_sms,
             address=employee.address,
@@ -830,6 +874,7 @@ def create_employee(db: Session, employee, tenant_id):
         db.add(db_employee)
         db.commit()
         db.refresh(db_employee)
+
         logger.info(f"Employee created successfully with ID: {db_employee.employee_code}")
         return {
             "employee_code": db_employee.employee_code,
@@ -842,6 +887,8 @@ def create_employee(db: Session, employee, tenant_id):
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
+            "special_need_start_date": db_employee.special_need_start_date,
+            "special_need_end_date": db_employee.special_need_end_date,
             "subscribe_via_email": db_employee.subscribe_via_email,
             "subscribe_via_sms": db_employee.subscribe_via_sms,
             "address": db_employee.address,
@@ -864,7 +911,7 @@ def create_employee(db: Session, employee, tenant_id):
         db.rollback()
         logger.warning(f"HTTPException: {str(e.detail)}")
         raise e
-    
+
     except Exception as e:
         db.rollback()
         logger.error(f"Unexpected error while creating employee: {str(e)}")
@@ -897,6 +944,8 @@ def get_employee(db: Session, employee_code, tenant_id):
             "alternate_mobile_number": employees.alternate_mobile_number,
             "office": employees.office,
             "special_need": employees.special_need,
+            "special_need_start_date": employees.special_need_start_date,
+            "special_need_end_date": employees.special_need_end_date,
             "subscribe_via_email": employees.subscribe_via_email,
             "subscribe_via_sms": employees.subscribe_via_sms,
             "address": employees.address,
@@ -943,6 +992,8 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
             "alternate_mobile_number": emp.alternate_mobile_number,
             "office": emp.office,
             "special_need": emp.special_need,
+            "special_need_start_date": emp.special_need_start_date,
+            "special_need_end_date": emp.special_need_end_date,
             "subscribe_via_email": emp.subscribe_via_email,
             "subscribe_via_sms": emp.subscribe_via_sms,
             "address": emp.address,
@@ -972,7 +1023,7 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
             logger.warning(f"Employee with code {employee_code} not found for tenant {tenant_id}")
             raise HTTPException(status_code=404, detail="Employee not found for this tenant.")
 
-        # Validate and update Department if provided
+        # --------- Validate Department if provided ---------
         if employee_update.department_id is not None:
             department = db.query(Department).filter_by(department_id=employee_update.department_id, tenant_id=tenant_id).first()
             if not department:
@@ -980,7 +1031,7 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
                 raise HTTPException(status_code=404, detail="Department not found for this tenant.")
             db_employee.department_id = employee_update.department_id
 
-        # Validate Latitude & Longitude only if provided
+        # --------- Validate Latitude & Longitude if provided ---------
         try:
             if employee_update.latitude is not None:
                 float(employee_update.latitude)
@@ -990,7 +1041,38 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
             logger.warning("Invalid latitude or longitude provided.")
             raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
 
-        # Update other fields only if provided
+        # --------- Validate & Handle special_need logic ---------
+        if employee_update.special_need is not None:
+            special_need = employee_update.special_need.lower()
+            allowed_special_needs = ['pregnancy', 'others', 'none']
+            if special_need not in allowed_special_needs:
+                logger.warning(f"Invalid special_need: {employee_update.special_need}")
+                raise HTTPException(status_code=422, detail="Invalid special_need. Allowed: pregnancy, others, none.")
+
+            # Normalize "none" to None
+            if special_need == 'none':
+                db_employee.special_need = None
+                db_employee.special_need_start_date = None
+                db_employee.special_need_end_date = None
+
+                if employee_update.special_need_start_date or employee_update.special_need_end_date:
+                    logger.warning("Dates provided for special_need = 'none'")
+                    raise HTTPException(status_code=422, detail="Do not provide dates when special_need is 'none'.")
+            else:
+                # Dates must be provided
+                if not employee_update.special_need_start_date or not employee_update.special_need_end_date:
+                    logger.warning("special_need requires both start and end dates.")
+                    raise HTTPException(status_code=422, detail="Start and end dates required for special_need.")
+
+                if employee_update.special_need_start_date > employee_update.special_need_end_date:
+                    logger.warning("special_need_start_date is after end_date.")
+                    raise HTTPException(status_code=422, detail="special_need_start_date must be before end date.")
+
+                db_employee.special_need = special_need
+                db_employee.special_need_start_date = employee_update.special_need_start_date
+                db_employee.special_need_end_date = employee_update.special_need_end_date
+
+        # --------- Update other fields if provided ---------
         if employee_update.gender is not None:
             db_employee.gender = employee_update.gender
 
@@ -1002,9 +1084,6 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
 
         if employee_update.office is not None:
             db_employee.office = employee_update.office
-
-        if employee_update.special_need is not None:
-            db_employee.special_need = employee_update.special_need
 
         if employee_update.subscribe_via_email is not None:
             db_employee.subscribe_via_email = employee_update.subscribe_via_email
@@ -1039,6 +1118,8 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
+            "special_need_start_date": db_employee.special_need_start_date,
+            "special_need_end_date": db_employee.special_need_end_date,
             "subscribe_via_email": db_employee.subscribe_via_email,
             "subscribe_via_sms": db_employee.subscribe_via_sms,
             "address": db_employee.address,
@@ -1046,7 +1127,7 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
             "longitude": db_employee.longitude,
             "landmark": db_employee.landmark,
         }
-    
+
     except IntegrityError as e:
         db.rollback()
         logger.error(f"IntegrityError while updating employee: {str(e.orig)}")
