@@ -11,16 +11,16 @@ from common_utils.auth.permission_checker import PermissionChecker
 
 router = APIRouter()
 
-def authenticate_user(db: Session, username: str, password: str):
-    user = crud.get_user_by_username(db, username)
+def authenticate_user(db: Session, email: str, password: str):
+    user = crud.get_user_by_email(db, email)
     if not user:
-        print(f"User {username} not found")
+        print(f"User with email {email} not found")
         return None
-    # Verify the hashed password
     if not verify_password(hash_password(password), user.hashed_password):
-        print(f"Password for user {username} is incorrect")
+        print(f"Password for email {email} is incorrect")
         return None
     return user
+
 
 @router.get("/me")
 async def get_me(       
