@@ -804,7 +804,7 @@ def create_employee(db: Session, employee, tenant_id):
             db.query(User)
             .filter_by(mobile_number=employee.mobile_number.strip(), tenant_id=tenant_id)
             .first()
-        )
+        ) 
         if existing_mobile_user:
             logger.warning(f"Mobile number {employee.mobile_number} already exists.")
             raise HTTPException(status_code=409, detail="Mobile number already exists.")
