@@ -88,7 +88,6 @@ class DepartmentOut(DepartmentBase):
 class EmployeeBase(BaseModel):
     employee_code: str  # Added to Base as it's required for both create & update
     gender: str
-    mobile_number: str
     alternate_mobile_number: Optional[str]
     office: str
     special_need: Optional[str]
@@ -105,12 +104,12 @@ class EmployeeBase(BaseModel):
 class EmployeeCreate(EmployeeBase):
     username: str
     email: str
+    mobile_number: str
     hashed_password: str
 
 class EmployeeUpdate(BaseModel):
     # employee_code: Optional[str]  # Optional for update
     gender: Optional[str] = None
-    mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
     special_need: Optional[str] = None
@@ -128,6 +127,7 @@ class EmployeeRead(EmployeeBase):
     employee_code: str
     user_id: int
     username: str
+    mobile_number: str
     email: str
 
     class Config:
@@ -139,7 +139,7 @@ class EmployeeResponse(BaseModel):
     user_id: int
     email: str
     gender: Optional[str] = None
-    mobile_number: Optional[str] = None
+    mobile_number: str
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
     special_need: Optional[str] = None
@@ -217,6 +217,7 @@ class AssignPolicyRequest(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
+    mobile_number: str
     email: str
     hashed_password: str
     tenant_id: int
@@ -225,6 +226,7 @@ class UserCreate(BaseModel):
 class UserRead(BaseModel):
     user_id: int
     username: str
+    mobile_number: str
     email: str
     tenant_id: int
     is_active: int

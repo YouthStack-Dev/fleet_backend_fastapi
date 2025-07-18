@@ -64,6 +64,7 @@ class User(Base, TimestampMixin):
     user_id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey('tenants.tenant_id'), nullable=False)
     username = Column(String(100), nullable=False)
+    mobile_number = Column(String(15), unique=True, nullable=True)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)  # Stores hashed password
     is_active = Column(Boolean, default=True)
@@ -95,7 +96,6 @@ class Employee(Base, TimestampMixin):
     department_id = Column(Integer, ForeignKey('departments.department_id'), nullable=False)
 
     gender = Column(String(50))
-    mobile_number = Column(String(15))
     alternate_mobile_number = Column(String(15))
     office = Column(String(255))
     special_need = Column(String, nullable=True)  # Enum recommended for future
