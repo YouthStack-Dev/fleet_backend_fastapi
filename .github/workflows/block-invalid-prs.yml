@@ -1,0 +1,23 @@
+# .github/workflows/block-invalid-prs.yml
+name: Block Invalid PRs
+
+on:
+  pull_request:
+    branches:
+      - main
+      - deploy
+
+jobs:
+  check-pr-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if PR source branch is not valid
+        run: |
+          if [[ "${{ github.base_ref }}" == "main" && "${{ github.head_ref }}" != "deploy" ]]; then
+            echo "Only deploy branch can merge into main."
+            exit 1
+          fi
+          if [[ "${{ github.base_ref }}" == "deploy" && "${{ github.head_ref }}" != "dev" ]]; then
+            echo "Only dev branch can merge into deploy."
+            exit 1
+          fi
