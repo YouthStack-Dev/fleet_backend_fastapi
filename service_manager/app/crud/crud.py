@@ -391,6 +391,8 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
 
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    return db.query(User).filter(User.email == email).first()
 
 
 
