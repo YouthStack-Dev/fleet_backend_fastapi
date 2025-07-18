@@ -63,7 +63,7 @@ class User(Base, TimestampMixin):
 
     user_id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, ForeignKey('tenants.tenant_id'), nullable=False)
-    username = Column(String(100), unique=True, nullable=False)
+    username = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)  # Stores hashed password
     is_active = Column(Boolean, default=True)
