@@ -405,11 +405,14 @@ def seed_data():
             # Create Users with different roles  password is dp for all users
             users = [
                 User(username="admin", email="admin@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
-                     tenant_id=tenants[0].tenant_id, is_active=1),
+                     tenant_id=tenants[0].tenant_id, is_active=1,
+                     mobile_number="9876543210"),
                 User(username="manager", email="manager@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
-                     tenant_id=tenants[0].tenant_id, is_active=1),
+                     tenant_id=tenants[0].tenant_id, is_active=1,
+                     mobile_number="9876543211"),
                 User(username="driver", email="driver@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
-                     tenant_id=tenants[0].tenant_id, is_active=1)
+                     tenant_id=tenants[0].tenant_id, is_active=1,
+                     mobile_number="9876543212")
             ]
             session.add_all(users)
             session.flush()
@@ -432,7 +435,6 @@ def seed_data():
                     user_id=users[0].user_id,
                     department_id=departments[0].department_id,
                     gender="Male",
-                    mobile_number="9876543210",
                     alternate_mobile_number="9123456789",
                     office="Head Office",
                     special_need=None,
@@ -448,7 +450,6 @@ def seed_data():
                     user_id=users[1].user_id,
                     department_id=departments[1].department_id,
                     gender="Female",
-                    mobile_number="8123456789",
                     alternate_mobile_number=None,
                     office="Main Office",
                     special_need="Wheelchair Access",
@@ -464,7 +465,6 @@ def seed_data():
                     user_id=users[2].user_id,
                     department_id=departments[2].department_id,
                     gender="Male",
-                    mobile_number="7894561230",
                     alternate_mobile_number=None,
                     office="Med Solutions Office",
                     special_need=None,

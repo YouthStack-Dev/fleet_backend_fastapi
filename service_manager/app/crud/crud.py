@@ -371,6 +371,7 @@ def create_user(db: Session, user: UserCreate):
         db_user = User(
             username=user.username,
             email=user.email,
+            mobile_number=user.mobile_number,
             hashed_password=user.hashed_password,
             tenant_id=user.tenant_id,
             is_active=user.is_active if user.is_active is not None else 1
@@ -799,8 +800,12 @@ def create_employee(db: Session, employee, tenant_id):
             logger.warning(f"Employee code {employee.employee_code} already exists.")
             raise HTTPException(status_code=409, detail="Employee code already exists.")
 
-        existing_mobile = db.query(Employee).filter_by(mobile_number=employee.mobile_number.strip()).first()
-        if existing_mobile:
+        existing_mobile_user = (
+            db.query(User)
+            .filter_by(mobile_number=employee.mobile_number.strip(), tenant_id=tenant_id)
+            .first()
+        )
+        if existing_mobile_user:
             logger.warning(f"Mobile number {employee.mobile_number} already exists.")
             raise HTTPException(status_code=409, detail="Mobile number already exists.")
 
@@ -819,6 +824,7 @@ def create_employee(db: Session, employee, tenant_id):
             new_user = User(
                 username=employee.username.strip(),
                 email=employee.email.strip(),
+                mobile_number=employee.mobile_number.strip(),
                 hashed_password=employee.hashed_password,
                 tenant_id=tenant_id,
                 is_active=True
@@ -855,7 +861,6 @@ def create_employee(db: Session, employee, tenant_id):
             user_id=user_id,
             department_id=employee.department_id,
             gender=employee.gender,
-            mobile_number=employee.mobile_number.strip(),
             alternate_mobile_number=employee.alternate_mobile_number,
             office=employee.office,
             special_need=employee.special_need,
@@ -881,7 +886,7 @@ def create_employee(db: Session, employee, tenant_id):
             "username": db_employee.user.username,
             "email": db_employee.user.email,
             "gender": db_employee.gender,
-            "mobile_number": db_employee.mobile_number,
+            "mobile_number": db_employee.user.mobile_number,
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
@@ -938,7 +943,7 @@ def get_employee(db: Session, employee_code, tenant_id):
         return {
             "employee_code": employees.employee_code,
             "gender": employees.gender,
-            "mobile_number": employees.mobile_number,
+            "mobile_number": employees.user.mobile_number,
             "alternate_mobile_number": employees.alternate_mobile_number,
             "office": employees.office,
             "special_need": employees.special_need,
@@ -986,7 +991,7 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
             "username": emp.user.username,
             "email": emp.user.email,
             "gender": emp.gender,
-            "mobile_number": emp.mobile_number,
+            "mobile_number": emp.user.mobile_number,
             "alternate_mobile_number": emp.alternate_mobile_number,
             "office": emp.office,
             "special_need": emp.special_need,
@@ -1112,7 +1117,7 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
             "username": db_employee.user.username,
             "email": db_employee.user.email,
             "gender": db_employee.gender,
-            "mobile_number": db_employee.mobile_number,
+            "mobile_number": db_employee.user.mobile_number,
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
