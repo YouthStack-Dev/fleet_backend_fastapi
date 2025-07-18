@@ -811,13 +811,9 @@ def create_employee(db: Session, employee, tenant_id):
             existing_employee = db.query(Employee).filter_by(user_id=db_user.user_id).first()
             if existing_employee:
                 logger.warning(f"User {db_user.user_id} is already an employee.")
-                raise HTTPException(status_code=409, detail="User is already an employee.")
+                raise HTTPException(status_code=409, detail=f"User with email {db_user.email} is already an employee.")
             user_id = db_user.user_id
         else:
-            existing_username = db.query(User).filter_by(username=employee.username.strip(), tenant_id=tenant_id).first()
-            if existing_username:
-                logger.warning(f"Username {employee.username} already exists for tenant {tenant_id}")
-                raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
 
             logger.info(f"Creating new user: {employee.username}, email: {employee.email}")
             new_user = User(
@@ -1556,8 +1552,7 @@ def create_driver(db: Session, driver: DriverCreate, vendor_id: int):
         # Step 2: Check if user exists by email or phone
         db_user = db.query(User).filter(
             or_(
-                User.email == driver.email,
-                User.username == driver.username
+                User.email == driver.email
             )
         ).first()
 
