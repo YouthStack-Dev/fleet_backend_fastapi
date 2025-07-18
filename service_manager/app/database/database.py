@@ -404,12 +404,11 @@ def seed_data():
 
             # Create Users with different roles  password is dp for all users
             users = [
-                User(username="admin", email="admin@acme.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
-                     
+                User(username="admin", email="admin@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[0].tenant_id, is_active=1),
-                User(username="manager", email="manager@neru.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
+                User(username="manager", email="manager@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[0].tenant_id, is_active=1),
-                User(username="driver", email="driver@neru.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
+                User(username="driver", email="driver@gmail.com", hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d", 
                      tenant_id=tenants[0].tenant_id, is_active=1)
             ]
             session.add_all(users)
