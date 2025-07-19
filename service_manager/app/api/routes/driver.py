@@ -11,7 +11,7 @@ from datetime import date
 import os
 import shutil
 import logging
-
+from common_utils.auth.permission_checker import PermissionChecker
 logger = logging.getLogger(__name__)
 router = APIRouter()
 @router.post("/vendor/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
@@ -28,7 +28,8 @@ def create_driver(
     badge_doc_file: Optional[UploadFile] = File(None),
     alternate_govt_id_doc_file: Optional[UploadFile] = File(None),
     photo_image: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
     try:
         logger.info(f"Creating driver for vendor_id={vendor_id} with email={form_data.email}")
