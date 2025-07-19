@@ -11,6 +11,9 @@ from datetime import date
 import os
 import shutil
 import logging
+from common_utils.auth.permission_checker import PermissionChecker
+# services/driver_service.py or similar
+from common_utils.auth.utils import hash_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +31,8 @@ def create_driver(
     badge_doc_file: Optional[UploadFile] = File(None),
     alternate_govt_id_doc_file: Optional[UploadFile] = File(None),
     photo_image: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
     try:
         logger.info(f"Creating driver for vendor_id={vendor_id} with email={form_data.email}")
@@ -68,7 +72,7 @@ def create_driver(
                 username=form_data.username.strip(),
                 email=form_data.email.strip(),
                 mobile_number=form_data.mobile_number.strip(),
-                hashed_password=form_data.hashed_password.strip(),
+                hashed_password=hash_password(form_data.hashed_password.strip()),  # ✅ hashed
                 tenant_id=vendor.tenant_id
             )
             db.add(new_user)
