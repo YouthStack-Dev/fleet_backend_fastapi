@@ -1535,94 +1535,156 @@ def delete_vehicle_type(db: Session, vehicle_type_id: int):
         db.rollback()
         logger.exception(f"Error deleting vehicle type id={vehicle_type_id}")
         raise HTTPException(status_code=500, detail="Failed to delete vehicle type")
+    
+# from fastapi import HTTPException
+# from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+# from uuid import uuid4
+# import logging
+# import os, shutil
+# from fastapi import UploadFile
+# logger = logging.getLogger(__name__)
 
-def create_driver(db: Session, driver: DriverCreate, vendor_id: int):
-    try:
-        logger.info(f"Creating driver for vendor_id={vendor_id} with payload={driver.dict()}")
+# def create_driver(db: Session, driver, vendor_id: int):
+#     try:
+#         logger.info(f"Creating driver for vendor_id={vendor_id}, payload={driver.dict()}")
 
-        if not driver.username.strip():
-            raise HTTPException(status_code=422, detail="Username is required.")
-        if not driver.email.strip():
-            raise HTTPException(status_code=422, detail="Email is required.")
-        if not driver.hashed_password.strip():
-            raise HTTPException(status_code=422, detail="Password is required.")
+#         # --------- Required field validations ---------
+#         if not driver.username or not driver.username.strip():
+#             raise HTTPException(status_code=422, detail="Username is required.")
+#         if not driver.email or not driver.email.strip():
+#             raise HTTPException(status_code=422, detail="Email is required.")
+#         if not driver.mobile_number or not driver.mobile_number.strip():
+#             raise HTTPException(status_code=422, detail="Mobile number is required.")
+#         if not driver.hashed_password:
+#             raise HTTPException(status_code=422, detail="Password is required.")
 
-        # Step 1: Validate vendor existence
-        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
-        if not vendor:
-            raise HTTPException(status_code=404, detail="Vendor not found.")
+#         # --------- Check Vendor ---------
+#         vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
+#         if not vendor:
+#             logger.error(f"Vendor {vendor_id} not found.")
+#             raise HTTPException(status_code=404, detail="Vendor not found.")
 
-        tenant_id = vendor.tenant_id  # Extract tenant_id from vendor
+#         tenant_id = vendor.tenant_id
 
-        # Step 2: Check if user exists by email or phone
-        db_user = db.query(User).filter(
-            or_(
-                User.email == driver.email
-            )
-        ).first()
+#         # --------- Uniqueness Checks ---------
+#         existing_mobile_user = (
+#             db.query(User)
+#             .filter_by(mobile_number=driver.mobile_number.strip(), tenant_id=tenant_id)
+#             .first()
+#         )
+#         if existing_mobile_user:
+#             logger.warning(f"Mobile number {driver.mobile_number} already exists for tenant {tenant_id}")
+#             raise HTTPException(status_code=409, detail="Mobile number already exists.")
+        
+#         # if driver.license_expiry_date and driver.license_expiry_date < date.today():
+#         #     raise HTTPException(status_code=400, detail="License expiry date must be in the future.")
 
-        if db_user:
-            logger.info(f"User already exists: user_id={db_user.user_id}, email={db_user.email}")
-            existing_driver = db.query(Driver).filter_by(user_id=db_user.user_id).first()
-            if existing_driver:
-                raise HTTPException(status_code=409, detail="User already registered as a driver.")
-            user_id = db_user.user_id
-        else:
-            # Step 3: Create new user
-            logger.info(f"Creating new user for driver: {driver.email}")
-            new_user = User(
-                username=driver.username,
-                email=driver.email,
-                hashed_password=driver.hashed_password,
-                tenant_id=tenant_id,
-                is_active=1
-            )
-            db.add(new_user)
-            db.commit()
-            db.refresh(new_user)
-            user_id = new_user.user_id
-            logger.info(f"New user created with user_id={user_id}")
+#         # --------- Check or create user ---------
+#         db_user = db.query(User).filter_by(email=driver.email.strip(), tenant_id=tenant_id).first()
+#         if db_user:
+#             logger.info(f"User with email {driver.email} already exists with user_id={db_user.user_id}")
 
-        # Step 4: Create the Driver
-        new_driver = Driver(
-            user_id=user_id,
-            vendor_id=vendor_id,
-            city=driver.city,
-            date_of_birth=driver.date_of_birth,
-            gender=driver.gender,
-            alternate_mobile_number=driver.alternate_mobile_number,
-            permanent_address=driver.permanent_address,
-            current_address=driver.current_address,
-            bgv_status=driver.bgv_status or "Pending",
-            bgv_date=driver.bgv_date,
-            police_doc_url=driver.police_doc_url,
-            license_doc_url=driver.license_doc_url,
-            photo_url=driver.photo_url,
-            is_active=True
-        )
-        db.add(new_driver)
-        db.commit()
-        db.refresh(new_driver)
+#             # Ensure the user is not already a driver
+#             existing_driver = db.query(Driver).filter_by(user_id=db_user.user_id).first()
+#             if existing_driver:
+#                 raise HTTPException(status_code=409, detail="User is already registered as a driver.")
+#             user_id = db_user.user_id
+#         else:
+#             logger.info(f"Creating new user: {driver.username}")
+#             new_user = User(
+#                 username=driver.username.strip(),
+#                 email=driver.email.strip(),
+#                 mobile_number=driver.mobile_number.strip(),
+#                 hashed_password=driver.hashed_password,
+#                 tenant_id=tenant_id,
+#                 is_active=True,
+#             )
+#             db.add(new_user)
+#             db.commit()
+#             db.refresh(new_user)
+#             user_id = new_user.user_id
+#         # --------- UUID Generation ---------
+#         driver_uuid = uuid4()
 
-        logger.info(f"Driver created successfully with driver_id={new_driver.driver_id}")
-        return new_driver
+#         # --------- Document Saving ---------
+#         def save_file(file: Optional[UploadFile], folder_name: str) -> Optional[str]:
+#             if file:
+#                 folder_path = os.path.join("uploaded_files", folder_name)
+#                 os.makedirs(folder_path, exist_ok=True)
+#                 file_path = os.path.join(folder_path, file.filename)
+#                 with open(file_path, "wb") as f:
+#                     shutil.copyfileobj(file.file, f)
+#                 return file_path
+#             return None
 
-    except IntegrityError as e:
-        db.rollback()
-        logger.error(f"IntegrityError while creating driver: {str(e.orig)}")
-        raise HTTPException(status_code=400, detail="Integrity error while creating driver.")
+#         # --------- Create Driver ---------
+#         new_driver = Driver(
+#             user_id=user_id,
+#             vendor_id=vendor_id,
+#             # license_number=driver.license_number,
+#             # license_expiry_date=driver.license_expiry_date,
+#             uuid=driver_uuid,
+#             city=driver.city,
+#             date_of_birth=driver.date_of_birth,
+#             gender=driver.gender,
+#             alternate_mobile_number=driver.alternate_mobile_number,
+#             permanent_address=driver.permanent_address,
+#             current_address=driver.current_address,
+#             bgv_status=driver.bgv_status,
+#             bgv_date=driver.bgv_date,
+#             bgv_doc_url=bgv_doc_url,
+#             # police_doc_url=driver.police_doc_url,
+#             # license_doc_url=driver.license_doc_url,
+#             # photo_url=driver.photo_url,
+#             is_active=True,
+#         )
 
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"SQLAlchemyError while creating driver: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database error while creating driver.")
+#         db.add(new_driver)
+#         db.commit()
+#         db.refresh(new_driver)
 
-    except HTTPException as e:
-        db.rollback()
-        logger.warning(f"HTTPException: {e.detail}")
-        raise e
 
-    except Exception as e:
-        db.rollback()
-        logger.exception("Unexpected error while creating driver")
-        raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
+#         logger.info(f"Driver created successfully with driver_id: {new_driver.driver_id}")
+#         return DriverOut(
+#             driver_id=new_driver.driver_id,
+#             uuid=new_driver.uuid,
+#             user_id=new_driver.user_id,
+#             username=new_driver.user.username,
+#             email=new_driver.user.email,
+#             mobile_number=new_driver.user.mobile_number,
+#             vendor_id=new_driver.vendor_id,
+#             city=new_driver.city,
+#             date_of_birth=new_driver.date_of_birth,
+#             gender=new_driver.gender,
+#             alternate_mobile_number=new_driver.alternate_mobile_number,
+#             permanent_address=new_driver.permanent_address,
+#             current_address=new_driver.current_address,
+#             bgv_status=new_driver.bgv_status,
+#             bgv_date=new_driver.bgv_date,
+#             # police_doc_url=new_driver.police_doc_url,
+#             # license_doc_url=new_driver.license_doc_url,
+#             # photo_url=new_driver.photo_url,
+#             # is_active=new_driver.is_active,
+#             # license_number=new_driver.license_number,
+#             # license_expiry_date=new_driver.license_expiry_date,
+#             created_at=new_driver.created_at,
+#             updated_at=new_driver.updated_at,
+#         )
+
+
+#     except IntegrityError as e:
+#         db.rollback()
+#         logger.error(f"IntegrityError: {str(e.orig)}")
+#         raise HTTPException(status_code=400, detail="Database integrity error while creating driver.")
+#     except SQLAlchemyError as e:
+#         db.rollback()
+#         logger.error(f"SQLAlchemyError: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Database error while creating driver.")
+#     except HTTPException as e:
+#         db.rollback()
+#         logger.warning(f"HTTPException: {str(e.detail)}")
+#         raise e
+#     except Exception as e:
+#         db.rollback()
+#         logger.error(f"Unexpected error while creating driver: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
