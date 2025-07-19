@@ -12,6 +12,9 @@ import os
 import shutil
 import logging
 from common_utils.auth.permission_checker import PermissionChecker
+# services/driver_service.py or similar
+from common_utils.auth.utils import hash_password
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 @router.post("/vendor/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
@@ -69,7 +72,7 @@ def create_driver(
                 username=form_data.username.strip(),
                 email=form_data.email.strip(),
                 mobile_number=form_data.mobile_number.strip(),
-                hashed_password=form_data.hashed_password.strip(),
+                hashed_password=hash_password(form_data.hashed_password.strip()),  # ✅ hashed
                 tenant_id=vendor.tenant_id
             )
             db.add(new_user)
