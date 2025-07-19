@@ -314,30 +314,64 @@ class Vehicle(Base):
     vehicle_type = relationship("VehicleType", back_populates="vehicles")
     tenant = relationship("Tenant", back_populates="vehicles")
     driver = relationship("Driver", back_populates="vehicles", uselist=False)
+    
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 class Driver(Base):
     __tablename__ = "drivers"
 
     driver_id = Column(Integer, primary_key=True, index=True)
+    
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
 
     user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True)
     vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
 
     city = Column(String(100), nullable=True)
     date_of_birth = Column(Date, nullable=True)
-    gender = Column(String(10), nullable=True)  # e.g., male/female/other
+    gender = Column(String(10), nullable=True)
 
     alternate_mobile_number = Column(String(20), nullable=True)
     permanent_address = Column(String(255), nullable=True)
     current_address = Column(String(255), nullable=True)
-    bgv_status = Column(String(50), default="Pending")  # e.g., Pending, Cleared, Rejected
 
+    bgv_status = Column(String(50), default="Pending")
     bgv_date = Column(Date, nullable=True)
+    bgv_doc_url = Column(String(255), nullable=True)  
 
-    police_doc_url = Column(String(255), nullable=True)
+    police_verification_status = Column(String(50), default="Pending")
+    police_verification_date = Column(Date, nullable=True)
+    police_verification_doc_url = Column(String(255), nullable=True)
+
+    medical_verification_status = Column(String(50), default="Pending")
+    medical_verification_date = Column(Date, nullable=True)
+    medical_verification_doc_url = Column(String(255), nullable=True)
+
+    training_verification_status = Column(String(50), default="Pending")
+    training_verification_date = Column(Date, nullable=True)
+    training_verification_doc_url = Column(String(255), nullable=True)
+
+    eye_test_verification_status = Column(String(50), default="Pending")
+    eye_test_verification_date = Column(Date, nullable=True)
+    eye_test_verification_doc_url = Column(String(255), nullable=True)
+
+    license_number = Column(String(20), nullable=True)
+    license_expiry_date = Column(Date, nullable=True)
     license_doc_url = Column(String(255), nullable=True)
-    photo_url = Column(String(255), nullable=True)
 
+    photo_url = Column(String(255), nullable=True)
+    
+    induction_date = Column(Date, nullable=True)
+    induction_doc_url = Column(String(255), nullable=True)
+
+    badge_number = Column(String(20), nullable=True)
+    badge_expiry_date = Column(Date, nullable=True)
+    badge_doc_url = Column(String(255), nullable=True)
+
+    alternate_govt_id = Column(String(20), nullable=True)
+    alternate_govt_id_doc_type = Column(String(50), nullable=True)
+    alternate_govt_id_doc_url = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
