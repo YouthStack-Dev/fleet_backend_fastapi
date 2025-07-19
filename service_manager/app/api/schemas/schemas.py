@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 from typing import List, Optional, Dict
 from datetime import date, datetime ,time
 from typing_extensions import Literal
@@ -417,43 +417,140 @@ class VehicleTypeUpdate(BaseModel):
     capacity: Optional[int]
     fuel_type: Optional[FuelType]
     vendor_id: Optional[int]
-class DriverBase(BaseModel):
-    username: str
-    email: str
-    hashed_password: str  # hashed on frontend or before insert
 
+from typing import Optional
+from datetime import date, datetime
+from uuid import UUID
+from pydantic import BaseModel, EmailStr
+
+
+class DriverBase(BaseModel):
     city: Optional[str] = None
     date_of_birth: Optional[date] = None
-    gender: Optional[str] = None  # male, female, other
-
+    gender: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     permanent_address: Optional[str] = None
     current_address: Optional[str] = None
-    bgv_status: Optional[str] = "Pending"  # default = Pending
+    bgv_status: Optional[str] = "Pending"
     bgv_date: Optional[date] = None
+    bgv_doc_url: Optional[str] = None
+    # police_doc_url: Optional[str] = None
+    # license_doc_url: Optional[str] = None
+    # photo_url: Optional[str] = None
+    is_active: Optional[bool] = True
+    # license_number: Optional[str] = None
+    # license_expiry_date: Optional[date] = None
 
-    police_doc_url: Optional[str] = None
-    license_doc_url: Optional[str] = None
-    photo_url: Optional[str] = None
 
-class DriverCreate(DriverBase):
+class DriverCreate(BaseModel):
+    username: str
+    email: EmailStr
+    hashed_password: str
+    mobile_number: str
+
+    city: Optional[str]
+    date_of_birth: Optional[date]
+    gender: Optional[str]
+
+    alternate_mobile_number: Optional[str]
+    permanent_address: Optional[str]
+    current_address: Optional[str]
+
+    bgv_status: Optional[str]
+    bgv_date: Optional[date]
+
+    police_verification_status: Optional[str]
+    police_verification_date: Optional[date]
+
+    medical_verification_status: Optional[str]
+    medical_verification_date: Optional[date]
+
+    training_verification_status: Optional[str]
+    training_verification_date: Optional[date]
+
+    eye_test_verification_status: Optional[str]
+    eye_test_verification_date: Optional[date]
+
+    license_number: Optional[str]
+    license_expiry_date: Optional[date]
+
+    induction_date: Optional[date]
+
+    badge_number: Optional[str]
+    badge_expiry_date: Optional[date]
+
+    alternate_govt_id: Optional[str]
+    alternate_govt_id_doc_type: Optional[str]
+
+class DriverUpdate(DriverBase):
     pass
-class DriverRead(DriverBase):
-    driver_id: int
+
+class UserOut(BaseModel):
     user_id: int
+    username: str
+    email: str
+    mobile_number: str
+
+    class Config:
+        from_attributes = True
+
+class DriverOut(BaseModel):
+    driver_id: int
+    uuid: UUID
     vendor_id: int
+
+    user: UserOut
+
+    city: Optional[str]
+    date_of_birth: Optional[date]
+    gender: Optional[str]
+
+    alternate_mobile_number: Optional[str]
+    permanent_address: Optional[str]
+    current_address: Optional[str]
+
+    bgv_status: Optional[str]
+    bgv_date: Optional[date]
+    bgv_doc_url: Optional[str]
+
+    police_verification_status: Optional[str]
+    police_verification_date: Optional[date]
+    police_verification_doc_url: Optional[str]
+
+    medical_verification_status: Optional[str]
+    medical_verification_date: Optional[date]
+    medical_verification_doc_url: Optional[str]
+
+    training_verification_status: Optional[str]
+    training_verification_date: Optional[date]
+    training_verification_doc_url: Optional[str]
+
+    eye_test_verification_status: Optional[str]
+    eye_test_verification_date: Optional[date]
+    eye_test_verification_doc_url: Optional[str]
+
+    license_number: Optional[str]
+    license_expiry_date: Optional[date]
+    license_doc_url: Optional[str]
+
+    photo_url: Optional[str]
+
+    induction_date: Optional[date]
+    induction_doc_url: Optional[str]
+
+    badge_number: Optional[str]
+    badge_expiry_date: Optional[date]
+    badge_doc_url: Optional[str]
+
+    alternate_govt_id: Optional[str]
+    alternate_govt_id_doc_type: Optional[str]
+    alternate_govt_id_doc_url: Optional[str]
+
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-class DriverOut(DriverBase):
-    driver_id: int
-    user_id: int
-    vendor_id: int
-    is_active: bool
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={UUID: lambda v: str(v)}
+    )
