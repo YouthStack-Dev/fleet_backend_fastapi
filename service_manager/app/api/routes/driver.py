@@ -17,20 +17,37 @@ from common_utils.auth.utils import hash_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+def file_size_validator(max_size_mb: int):
+    async def validate(file: Optional[UploadFile]):
+        if file:
+            contents = await file.read()
+            if len(contents) > max_size_mb * 1024 * 1024:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File '{file.filename}' exceeds {max_size_mb} MB size limit"
+                )
+            # Reset file pointer so it can be read again later
+            file.file.seek(0)
+        return file
+    return validate
+
+MAX_SIZE_MB = 5  # change as needed
+
 @router.post("/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
 def create_driver(
     vendor_id: int,
     form_data: DriverCreate = Depends(),
-    bgv_doc_file: Optional[UploadFile] = File(None),
-    police_verification_doc_file: Optional[UploadFile] = File(None),
-    medical_verification_doc_file: Optional[UploadFile] = File(None),
-    training_verification_doc_file: Optional[UploadFile] = File(None),
-    eye_test_verification_doc_file: Optional[UploadFile] = File(None),
-    license_doc_file: Optional[UploadFile] = File(None),
-    induction_doc_file: Optional[UploadFile] = File(None),
-    badge_doc_file: Optional[UploadFile] = File(None),
-    alternate_govt_id_doc_file: Optional[UploadFile] = File(None),
-    photo_image: Optional[UploadFile] = File(None),
+    bgv_doc_file: Optional[UploadFile] =  Depends(file_size_validator(MAX_SIZE_MB)),
+    police_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    medical_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    training_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    eye_test_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    license_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    induction_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    badge_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    alternate_govt_id_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    photo_image: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
