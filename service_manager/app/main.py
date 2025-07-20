@@ -46,6 +46,20 @@ app.add_middleware(
     # allow_headers=["Authorization", "Content-Type"],
     allow_headers=["*"],
 )
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+import logging
+
+logger = logging.getLogger(__name__)
+
+class RequestLoggerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"[REQUEST] {request.method} {request.url}")
+        logger.info(f"[HEADERS] Content-Type: {request.headers.get('content-type')}")
+        response = await call_next(request)
+        return response
+
+app.add_middleware(RequestLoggerMiddleware)
 
 app.include_router(driver_router, prefix="/api/vendors/{vendor_id}/drivers", tags=["drivers"])
 app.include_router(vehicle_type_router, prefix="/api/vehicle_types", tags=["vehicle_types"])
