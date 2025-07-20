@@ -47,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(driver_router, prefix="/api/drivers", tags=["drivers"])
+app.include_router(driver_router, prefix="/api/vendors/{vendor_id}/drivers", tags=["drivers"])
 app.include_router(vehicle_type_router, prefix="/api/vehicle_types", tags=["vehicle_types"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
 app.include_router(vendor_router, prefix="/api/vendors", tags=["vendors"])
