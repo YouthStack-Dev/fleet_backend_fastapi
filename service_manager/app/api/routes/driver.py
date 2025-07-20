@@ -17,7 +17,7 @@ from common_utils.auth.utils import hash_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-@router.post("/vendor/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
 def create_driver(
     vendor_id: int,
     form_data: DriverCreate = Depends(),
@@ -227,3 +227,46 @@ def create_driver(
         traceback.print_exc()
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
+    
+from sqlalchemy import or_
+from fastapi import Query
+from typing import List, Optional
+
+@router.get("/", response_model=List[DriverOut])
+def get_drivers_by_vendor(
+    vendor_id: int,
+    skip: int = 0,
+    limit: int = 10,
+    bgv_status: Optional[str] = None,
+    search: Optional[str] = Query(None, description="Search by username or email"),
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.create", "driver_management.read"]))
+):
+    try:
+        logger.info(f"Fetching drivers for vendor_id={vendor_id} with filters: skip={skip}, limit={limit}, bgv_status={bgv_status}, search={search}")
+
+        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found.")
+
+        query = db.query(Driver).join(User).filter(Driver.vendor_id == vendor_id)
+
+        if bgv_status:
+            query = query.filter(Driver.bgv_status == bgv_status)
+
+        if search:
+            search_term = f"%{search.strip()}%"
+            query = query.filter(or_(
+                User.username.ilike(search_term),
+                User.email.ilike(search_term)
+            ))
+
+        drivers = query.offset(skip).limit(limit).all()
+        return drivers
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching drivers.")
+    except Exception as e:
+        logger.exception("Unexpected error while fetching drivers.")
+        raise HTTPException(status_code=500, detail="Unexpected error while fetching drivers.")
