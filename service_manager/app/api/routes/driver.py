@@ -14,21 +14,26 @@ import logging
 from common_utils.auth.permission_checker import PermissionChecker
 # services/driver_service.py or similar
 from common_utils.auth.utils import hash_password
+from typing import Callable, Optional
+import io
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def file_size_validator(max_size_mb: int):
-    async def validate(file: Optional[UploadFile]):
-        if file:
-            contents = await file.read()
-            if len(contents) > max_size_mb * 1024 * 1024:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File '{file.filename}' exceeds {max_size_mb} MB size limit"
-                )
-            # Reset file pointer so it can be read again later
-            file.file.seek(0)
+def file_size_validator(max_size_mb: int) -> Callable[[Optional[UploadFile]], Optional[UploadFile]]:
+    async def validate(file: Optional[UploadFile] = File(None)) -> Optional[UploadFile]:
+        if file is None:
+            return None  # file is optional
+
+        contents = await file.read()
+        file.file = io.BytesIO(contents)  # reset stream for downstream usage
+
+        size_mb = len(contents) / (1024 * 1024)
+        if size_mb > max_size_mb:
+            raise HTTPException(
+                status_code=413,
+                detail=f"{file.filename} is too large. Max size allowed is {max_size_mb}MB.",
+            )
         return file
     return validate
 
