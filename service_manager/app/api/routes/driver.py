@@ -21,40 +21,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def file_size_validator(file: Optional[UploadFile] = File(None), max_size_mb: int = 200) -> Optional[UploadFile]:
+async def file_size_validator(
+    file: Optional[UploadFile],
+    allowed_types: list[str],
+    max_size_mb: int = 5
+) -> Optional[UploadFile]:
+    if not file or not file.filename:
+        logger.info("No file uploaded, skipping validation.")
+        return None
 
-    logger.info(f"Setting file size validator with max size: {max_size_mb}MB")
-    # async def validate() -> Optional[UploadFile]:
+    logger.info(f"Validating file: {file.filename}")
 
-    if file is None:
-        return None  # file is optional
-    logger.info(f"Validating file: {file.filename}") 
+    if file.content_type not in allowed_types:
+        logger.warning(f"{file.filename} has invalid type '{file.content_type}'. Allowed types: {allowed_types}")
+        raise HTTPException(
+            status_code=415,
+            detail=f"{file.filename} has invalid type '{file.content_type}'. Allowed types: {allowed_types}"
+        )
 
     contents = await file.read()
-    file.file = io.BytesIO(contents)  # reset stream for downstream usage
+    file.file = io.BytesIO(contents)  # reset file pointer
 
     size_mb = len(contents) / (1024 * 1024)
     if size_mb > max_size_mb:
         raise HTTPException(
             status_code=413,
-            detail=f"{file.filename} is too large. Max size allowed is {max_size_mb}MB.",
+            detail=f"{file.filename} is too large. Max allowed size is {max_size_mb}MB."
         )
+
     return file
-    # return validate
-import asyncio
-
-def sync_wrapper(file: Optional[UploadFile] = File(None)) -> Optional[UploadFile]:
-    logger.info(f"Sync wrapper called for file: {file.filename if file else 'None'}")
-
-    result = asyncio.run(file_size_validator(file))
-    logger.info("No file provided, returning None")
-
-    return result
-
-MAX_SIZE_MB = 5  # change as needed
 
 @router.post("/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
-def create_driver(
+async def create_driver(
     vendor_id: int,
     form_data: DriverCreate = Depends(),
     bgv_doc_file: Optional[UploadFile] = None,
@@ -74,6 +72,43 @@ def create_driver(
     try:
         logger.info(f"Creating driver for vendor_id={vendor_id} with email={form_data.email}")
         logger.info(f"Received form data: bgv_doc_file: {bgv_doc_file.filename if bgv_doc_file else 'None'},police_verification_doc_file: {police_verification_doc_file.filename if police_verification_doc_file else 'None'},medical_verification_doc_file: {medical_verification_doc_file.filename if medical_verification_doc_file else 'None'}, training_verification_doc_file: {training_verification_doc_file.filename if training_verification_doc_file else 'None'}, eye_test_verification_doc_file: {eye_test_verification_doc_file.filename if eye_test_verification_doc_file else 'None'}, license_doc_file: {license_doc_file.filename if license_doc_file else 'None'}, induction_doc_file: {induction_doc_file.filename if induction_doc_file else 'None'}, badge_doc_file: {badge_doc_file.filename if badge_doc_file else 'None'}, alternate_govt_id_doc_file: {alternate_govt_id_doc_file.filename if alternate_govt_id_doc_file else 'None'}, photo_image: {photo_image.filename if photo_image else 'None'}")
+
+       # Validate file sizes if present
+        # For PDF documents
+        bgv_doc_file = await file_size_validator(bgv_doc_file, allowed_types=["application/pdf"])
+        police_verification_doc_file = await file_size_validator(police_verification_doc_file, allowed_types=["application/pdf"])
+        medical_verification_doc_file = await file_size_validator(medical_verification_doc_file, allowed_types=["application/pdf"])
+        training_verification_doc_file = await file_size_validator(training_verification_doc_file, allowed_types=["application/pdf"])
+        eye_test_verification_doc_file = await file_size_validator(eye_test_verification_doc_file, allowed_types=["application/pdf"])
+        license_doc_file = await file_size_validator(license_doc_file, allowed_types=["application/pdf"])
+        induction_doc_file = await file_size_validator(induction_doc_file, allowed_types=["application/pdf"])
+        badge_doc_file = await file_size_validator(badge_doc_file, allowed_types=["application/pdf"])
+        alternate_govt_id_doc_file = await file_size_validator(alternate_govt_id_doc_file, allowed_types=["application/pdf"])
+
+        # For photo image (jpeg/png)
+        photo_image = await file_size_validator(
+            photo_image,
+            allowed_types=["image/jpeg", "image/jpg", "image/png"]
+        )
+
+
+        # Log what files were uploaded
+        logger.info("Files uploaded:")
+        for label, file in {
+            "bgv": bgv_doc_file,
+            "police": police_verification_doc_file,
+            "medical": medical_verification_doc_file,
+            "training": training_verification_doc_file,
+            "eye": eye_test_verification_doc_file,
+            "license": license_doc_file,
+            "induction": induction_doc_file,
+            "badge": badge_doc_file,
+            "govt_id": alternate_govt_id_doc_file,
+            "photo": photo_image,
+        }.items():
+            if file:
+                logger.info(f"{label}: {file.filename} ({len(await file.read()) / (1024 * 1024):.2f} MB)")
+                file.file.seek(0)  # Reset after reading for logging
 
 
 
