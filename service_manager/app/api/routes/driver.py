@@ -6,7 +6,7 @@ from app.api.schemas.schemas import DriverCreate, DriverOut
 from app.database.models import Driver, User, Vendor
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from uuid import uuid4
-from typing import Optional
+from typing import Annotated, Optional
 from datetime import date
 import os
 import shutil
@@ -20,22 +20,36 @@ import io
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-def file_size_validator(max_size_mb: int) -> Callable[[Optional[UploadFile]], Optional[UploadFile]]:
-    async def validate(file: Optional[UploadFile] = File(None)) -> Optional[UploadFile]:
-        if file is None:
-            return None  # file is optional
 
-        contents = await file.read()
-        file.file = io.BytesIO(contents)  # reset stream for downstream usage
+async def file_size_validator(file: Optional[UploadFile] = File(None), max_size_mb: int = 200) -> Optional[UploadFile]:
 
-        size_mb = len(contents) / (1024 * 1024)
-        if size_mb > max_size_mb:
-            raise HTTPException(
-                status_code=413,
-                detail=f"{file.filename} is too large. Max size allowed is {max_size_mb}MB.",
-            )
-        return file
-    return validate
+    logger.info(f"Setting file size validator with max size: {max_size_mb}MB")
+    # async def validate() -> Optional[UploadFile]:
+
+    if file is None:
+        return None  # file is optional
+    logger.info(f"Validating file: {file.filename}") 
+
+    contents = await file.read()
+    file.file = io.BytesIO(contents)  # reset stream for downstream usage
+
+    size_mb = len(contents) / (1024 * 1024)
+    if size_mb > max_size_mb:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{file.filename} is too large. Max size allowed is {max_size_mb}MB.",
+        )
+    return file
+    # return validate
+import asyncio
+
+def sync_wrapper(file: Optional[UploadFile] = File(None)) -> Optional[UploadFile]:
+    logger.info(f"Sync wrapper called for file: {file.filename if file else 'None'}")
+
+    result = asyncio.run(file_size_validator(file))
+    logger.info("No file provided, returning None")
+
+    return result
 
 MAX_SIZE_MB = 5  # change as needed
 
@@ -43,21 +57,25 @@ MAX_SIZE_MB = 5  # change as needed
 def create_driver(
     vendor_id: int,
     form_data: DriverCreate = Depends(),
-    bgv_doc_file: Optional[UploadFile] =  Depends(file_size_validator(MAX_SIZE_MB)),
-    police_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    medical_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    training_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    eye_test_verification_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    license_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    induction_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    badge_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    alternate_govt_id_doc_file: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
-    photo_image: Optional[UploadFile] = Depends(file_size_validator(MAX_SIZE_MB)),
+    bgv_doc_file: Optional[UploadFile] = None,
+    police_verification_doc_file: Optional[UploadFile] = None,
+    medical_verification_doc_file: Optional[UploadFile] = None,
+    training_verification_doc_file: Optional[UploadFile] = None,
+    eye_test_verification_doc_file: Optional[UploadFile] = None,
+    license_doc_file: Optional[UploadFile] = None,
+    induction_doc_file: Optional[UploadFile] = None,
+    badge_doc_file: Optional[UploadFile] = None,
+    alternate_govt_id_doc_file: Optional[UploadFile] = None,
+    photo_image: Optional[UploadFile] = None,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
+
     try:
         logger.info(f"Creating driver for vendor_id={vendor_id} with email={form_data.email}")
+        logger.info(f"Received form data: bgv_doc_file: {bgv_doc_file.filename if bgv_doc_file else 'None'},police_verification_doc_file: {police_verification_doc_file.filename if police_verification_doc_file else 'None'},medical_verification_doc_file: {medical_verification_doc_file.filename if medical_verification_doc_file else 'None'}, training_verification_doc_file: {training_verification_doc_file.filename if training_verification_doc_file else 'None'}, eye_test_verification_doc_file: {eye_test_verification_doc_file.filename if eye_test_verification_doc_file else 'None'}, license_doc_file: {license_doc_file.filename if license_doc_file else 'None'}, induction_doc_file: {induction_doc_file.filename if induction_doc_file else 'None'}, badge_doc_file: {badge_doc_file.filename if badge_doc_file else 'None'}, alternate_govt_id_doc_file: {alternate_govt_id_doc_file.filename if alternate_govt_id_doc_file else 'None'}, photo_image: {photo_image.filename if photo_image else 'None'}")
+
+
 
         # Validation
         if not form_data.username.strip():
@@ -127,9 +145,14 @@ def create_driver(
                 with open(file_path, "wb") as f:
                     shutil.copyfileobj(file.file, f)
 
-                # Return the relative path for later use or DB storage
-                return os.path.relpath(file_path, start="uploaded_files")
+                # Get relative path for DB, and full path for logs
+                rel_path = os.path.relpath(file_path, start="uploaded_files")
+                abs_path = os.path.abspath(file_path)
 
+                logger.info(f"{doc_type.upper()} document saved at: {abs_path}")
+                return rel_path
+            else:
+                logger.debug(f"No file provided for {doc_type}")
             return None
 
 
