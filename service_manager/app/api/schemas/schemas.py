@@ -482,8 +482,45 @@ class DriverCreate(BaseModel):
     alternate_govt_id: Optional[str]
     alternate_govt_id_doc_type: Optional[str]
 
-class DriverUpdate(DriverBase):
-    pass
+class DriverUpdate(BaseModel):
+    username: Optional[str]
+    email: Optional[EmailStr]
+    hashed_password: Optional[str]
+    mobile_number: Optional[str]
+
+    city: Optional[str]
+    date_of_birth: Optional[date]
+    gender: Optional[str]
+
+    alternate_mobile_number: Optional[str]
+    permanent_address: Optional[str]
+    current_address: Optional[str]
+
+    bgv_status: Optional[str]
+    bgv_date: Optional[date]
+
+    police_verification_status: Optional[str]
+    police_verification_date: Optional[date]
+
+    medical_verification_status: Optional[str]
+    medical_verification_date: Optional[date]
+
+    training_verification_status: Optional[str]
+    training_verification_date: Optional[date]
+
+    eye_test_verification_status: Optional[str]
+    eye_test_verification_date: Optional[date]
+
+    license_number: Optional[str]
+    license_expiry_date: Optional[date]
+
+    induction_date: Optional[date]
+
+    badge_number: Optional[str]
+    badge_expiry_date: Optional[date]
+
+    alternate_govt_id: Optional[str]
+    alternate_govt_id_doc_type: Optional[str]
 
 class UserOut(BaseModel):
     user_id: int
