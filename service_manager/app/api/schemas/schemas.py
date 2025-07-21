@@ -153,6 +153,7 @@ class EmployeeResponse(BaseModel):
     landmark: Optional[str] = None
 class EmployeesByDepartmentResponse(BaseModel):
     department_id: int
+    department_name: str
     tenant_id: int
     total_employees: int
     employees: List[EmployeeResponse]
