@@ -504,7 +504,8 @@ def get_drivers_by_vendor(
 def toggle_driver_status(
     vendor_id: int,
     driver_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.update"]))
 ):
     try:
         driver = (
@@ -534,7 +535,8 @@ def update_driver_status(
     vendor_id: int,
     driver_id: int,
     status: StatusUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.update"]))
 ):
     driver = db.query(Driver).filter_by(driver_id=driver_id, vendor_id=vendor_id).first()
     if not driver:
