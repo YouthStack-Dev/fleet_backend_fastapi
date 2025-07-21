@@ -159,6 +159,8 @@ class EmployeesByDepartmentResponse(BaseModel):
     tenant_id: int
     total_employees: int
     employees: List[EmployeeResponse]
+class StatusUpdate(BaseModel):
+    is_active: bool
 
 class EmployeeDeleteRead(BaseModel):
     message: str
