@@ -929,6 +929,7 @@ def get_employee(db: Session, employee_code, tenant_id):
         employees = (
             db.query(Employee)
             .join(Employee.user)
+            .join(Employee.department)  # Ensure the department is joined
             .filter(Employee.employee_code == employee_code)
             .filter(User.tenant_id == tenant_id)
             .first()
@@ -939,8 +940,8 @@ def get_employee(db: Session, employee_code, tenant_id):
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.user.username}, email: {employees.user.email}")
-        # return employees
-        return {
+
+        employee_data = {
             "employee_code": employees.employee_code,
             "gender": employees.gender,
             "mobile_number": employees.user.mobile_number,
@@ -956,12 +957,16 @@ def get_employee(db: Session, employee_code, tenant_id):
             "longitude": employees.longitude,
             "landmark": employees.landmark,
             "department_id": employees.department_id,
+            "department_name": employees.department.department_name,  # ✅ added
             "user_id": employees.user.user_id,
             "username": employees.user.username,
             "email": employees.user.email
         }
+
+        logger.info(f"Returning employee data: {employee_data}")
+        return employee_data
+
     except HTTPException as e:
-        # Allow FastAPI to handle HTTP errors directly
         logger.warning(f"HTTPException while fetching employee: {str(e.detail)}")
         raise e
     except Exception as e:
@@ -969,48 +974,63 @@ def get_employee(db: Session, employee_code, tenant_id):
         logger.error(f"Exception while fetching employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Error during query execution")
 
+
 def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
-    logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
+    try:
+        logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
 
-    employees = db.query(Employee).join(User).filter(
-        Employee.department_id == department_id,
-        User.tenant_id == tenant_id
-    ).all()
+        # Fetch department
+        department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
+        if not department:
+            logger.warning(f"Department {department_id} not found for tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="Department not found.")
 
-    if not employees:
-        logger.warning(f"No employees found for department {department_id} and tenant {tenant_id}")
-        raise HTTPException(status_code=404, detail="No employees found for this department.")
+        # Fetch employees
+        employees = db.query(Employee).join(User).filter(
+            Employee.department_id == department_id,
+            User.tenant_id == tenant_id
+        ).all()
 
-    logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
+        if not employees:
+            logger.warning(f"No employees found for department {department_id} and tenant {tenant_id}")
+            raise HTTPException(status_code=404, detail="No employees found for this department.")
 
-    employee_list = []
-    for emp in employees:
-        employee_list.append({
-            "user_id": emp.user.user_id,
-            "employee_code": emp.employee_code,
-            "username": emp.user.username,
-            "email": emp.user.email,
-            "gender": emp.gender,
-            "mobile_number": emp.user.mobile_number,
-            "alternate_mobile_number": emp.alternate_mobile_number,
-            "office": emp.office,
-            "special_need": emp.special_need,
-            "special_need_start_date": emp.special_need_start_date,
-            "special_need_end_date": emp.special_need_end_date,
-            "subscribe_via_email": emp.subscribe_via_email,
-            "subscribe_via_sms": emp.subscribe_via_sms,
-            "address": emp.address,
-            "latitude": emp.latitude,
-            "longitude": emp.longitude,
-            "landmark": emp.landmark
-        })
+        logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
 
-    return {
-        "department_id": department_id,
-        "tenant_id": tenant_id,
-        "total_employees": len(employee_list),
-        "employees": employee_list
-    }
+        employee_list = []
+        for emp in employees:
+            employee_list.append({
+                "user_id": emp.user.user_id,
+                "employee_code": emp.employee_code,
+                "username": emp.user.username,
+                "email": emp.user.email,
+                "gender": emp.gender,
+                "mobile_number": emp.user.mobile_number,
+                "alternate_mobile_number": emp.alternate_mobile_number,
+                "office": emp.office,
+                "special_need": emp.special_need,
+                "special_need_start_date": emp.special_need_start_date,
+                "special_need_end_date": emp.special_need_end_date,
+                "subscribe_via_email": emp.subscribe_via_email,
+                "subscribe_via_sms": emp.subscribe_via_sms,
+                "address": emp.address,
+                "latitude": emp.latitude,
+                "longitude": emp.longitude,
+                "landmark": emp.landmark,
+                "department_name": department.department_name
+            })
+
+        return {
+            "department_id": department_id,
+            "department_name": department.department_name,
+            "tenant_id": tenant_id,
+            "total_employees": len(employee_list),
+            "employees": employee_list
+        }
+
+    except Exception as e:
+        logger.exception("Unhandled exception in get_employee_by_department")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
@@ -1338,7 +1358,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from app.database.models import Vendor
+from app.database.models import Vendor,Department
 
 def create_vendor(db: Session, vendor_data, tenant_id: int):
     logger.info(f"Creating vendor: {vendor_data.vendor_name} for tenant_id: {tenant_id}")
