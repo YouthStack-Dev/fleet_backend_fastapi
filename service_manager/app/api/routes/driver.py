@@ -335,7 +335,7 @@ async def update_driver(
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found.")
 
-        driver_uuid = str(driver.driver_uuid)
+        driver_uuid = str(driver.uuid)
         user = db.query(User).filter_by(user_id=user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found.")
@@ -365,7 +365,7 @@ async def update_driver(
         async def process_file(doc_file, doc_type, allowed_types):
             if doc_file:
                 validated = await file_size_validator(doc_file, allowed_types=allowed_types)
-                return await save_file(validated, driver_uuid, doc_type)
+                return save_file(validated, driver_uuid, doc_type)
             return None
 
         bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"])
