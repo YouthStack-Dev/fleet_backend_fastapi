@@ -929,6 +929,7 @@ def get_employee(db: Session, employee_code, tenant_id):
         employees = (
             db.query(Employee)
             .join(Employee.user)
+            .join(Employee.department)  # Ensure the department is joined
             .filter(Employee.employee_code == employee_code)
             .filter(User.tenant_id == tenant_id)
             .first()
@@ -939,8 +940,8 @@ def get_employee(db: Session, employee_code, tenant_id):
             raise HTTPException(status_code=404, detail="Employee not found.")
 
         logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.user.username}, email: {employees.user.email}")
-        # return employees
-        return {
+
+        employee_data = {
             "employee_code": employees.employee_code,
             "gender": employees.gender,
             "mobile_number": employees.user.mobile_number,
@@ -956,12 +957,16 @@ def get_employee(db: Session, employee_code, tenant_id):
             "longitude": employees.longitude,
             "landmark": employees.landmark,
             "department_id": employees.department_id,
+            "department_name": employees.department.department_name,  # ✅ added
             "user_id": employees.user.user_id,
             "username": employees.user.username,
             "email": employees.user.email
         }
+
+        logger.info(f"Returning employee data: {employee_data}")
+        return employee_data
+
     except HTTPException as e:
-        # Allow FastAPI to handle HTTP errors directly
         logger.warning(f"HTTPException while fetching employee: {str(e.detail)}")
         raise e
     except Exception as e:
@@ -1011,7 +1016,8 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
                 "address": emp.address,
                 "latitude": emp.latitude,
                 "longitude": emp.longitude,
-                "landmark": emp.landmark
+                "landmark": emp.landmark,
+                "department_name": department.department_name
             })
 
         return {
