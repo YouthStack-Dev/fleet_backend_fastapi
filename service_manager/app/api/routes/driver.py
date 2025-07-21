@@ -2,7 +2,7 @@ import traceback
 from fastapi import APIRouter, Depends, status, Form, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from app.database.database import get_db
-from app.api.schemas.schemas import DriverCreate, DriverOut, DriverUpdate
+from app.api.schemas.schemas import DriverCreate, DriverOut, DriverUpdate,StatusUpdate
 from app.database.models import Driver, User, Vendor
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from uuid import uuid4
@@ -499,3 +499,57 @@ def get_drivers_by_vendor(
     except Exception as e:
         logger.exception("Unexpected error while fetching drivers.")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching drivers.")
+
+@router.patch("/{driver_id}/status", response_model=DriverOut)
+def toggle_driver_status(
+    vendor_id: int,
+    driver_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        driver = (
+            db.query(Driver)
+            .filter(Driver.driver_id == driver_id, Driver.vendor_id == vendor_id)
+            .first()
+        )
+
+        if not driver:
+            logger.warning(f"Driver ID {driver_id} not found for Vendor ID {vendor_id}")
+            raise HTTPException(status_code=404, detail="Driver not found for this vendor")
+
+        driver.is_active = not driver.is_active
+        db.commit()
+        db.refresh(driver)
+
+        status = "activated" if driver.is_active else "deactivated"
+        logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {status}")
+        return driver
+
+    except Exception as e:
+        logger.error(f"Error toggling status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@router.put("/{driver_id}/status", response_model=DriverOut)
+def update_driver_status(
+    vendor_id: int,
+    driver_id: int,
+    status: StatusUpdate,
+    db: Session = Depends(get_db)
+):
+    driver = db.query(Driver).filter_by(driver_id=driver_id, vendor_id=vendor_id).first()
+    if not driver:
+        logger.warning(f"Driver ID {driver_id} not found for vendor ID {vendor_id}")
+        raise HTTPException(status_code=404, detail="Driver not found for this vendor")
+
+    if driver.is_active == status.is_active:
+        current_state = "active" if status.is_active else "inactive"
+        logger.info(f"Driver {driver_id} is already {current_state}")
+        raise HTTPException(status_code=400, detail=f"Driver is already {current_state}")
+
+    driver.is_active = status.is_active
+    db.commit()
+    db.refresh(driver)
+
+    new_state = "activated" if driver.is_active else "deactivated"
+    logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {new_state}")
+    return driver
