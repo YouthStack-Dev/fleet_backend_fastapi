@@ -129,6 +129,7 @@ class EmployeeRead(EmployeeBase):
     username: str
     mobile_number: str
     email: str
+    department_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -151,8 +152,10 @@ class EmployeeResponse(BaseModel):
     latitude: Optional[str] = None
     longitude: Optional[str] = None
     landmark: Optional[str] = None
+    department_name: Optional[str] = None
 class EmployeesByDepartmentResponse(BaseModel):
     department_id: int
+    department_name: str
     tenant_id: int
     total_employees: int
     employees: List[EmployeeResponse]
