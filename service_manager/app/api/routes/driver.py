@@ -16,10 +16,43 @@ from common_utils.auth.permission_checker import PermissionChecker
 from common_utils.auth.utils import hash_password
 from typing import Callable, Optional
 import io
-
+from sqlalchemy import or_
+from fastapi import Query
+from typing import List, Optional
+from sqlalchemy.orm import selectinload
 logger = logging.getLogger(__name__)
 router = APIRouter()
+from sqlalchemy.orm import joinedload
 
+
+@router.get("/tenants/drivers/", response_model=List[DriverOut])
+def get_all_drivers_by_tenant(
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["driver_management.read"]))
+) -> List[DriverOut]:
+    tenant_id = token_data.get("tenant_id")
+    try:
+        logger.info(f"Fetching all drivers for tenant_id: {tenant_id}")
+
+        drivers = (
+            db.query(Driver)
+            .join(Driver.vendor)
+            .filter(Vendor.tenant_id == tenant_id)
+            .options(joinedload(Driver.user))  # eager-load user info
+            .all()
+        )
+
+        logger.info(f"Found {len(drivers)} drivers for tenant_id: {tenant_id}")
+
+        return [DriverOut.model_validate(driver) for driver in drivers]
+
+    except SQLAlchemyError as e:
+        logger.error(f"DB error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching drivers.")
+
+    except Exception as e:
+        logger.exception(f"Unexpected error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unexpected server error.")
 
 async def file_size_validator(
     file: Optional[UploadFile],
@@ -74,7 +107,7 @@ def save_file(file: Optional[UploadFile], driver_uuid: str, doc_type: str) -> Op
     else:
         logger.debug(f"No file provided for {doc_type}")
     return None
-@router.post("/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
 async def create_driver(
     vendor_id: int,
     form_data: DriverCreate = Depends(),
@@ -165,6 +198,11 @@ async def create_driver(
             if existing_driver:
                 raise HTTPException(status_code=409, detail="User already exists as a driver.")
         else:
+                # Check mobile number before creating a new user
+            existing_mobile = db.query(User).filter(User.mobile_number == form_data.mobile_number.strip()).first()
+            if existing_mobile:
+                logger.warning(f"Mobile number {form_data.mobile_number} already exists.")
+                raise HTTPException(status_code=409, detail="Mobile number already exists.")
             # Create new user
             new_user = User(
                 username=form_data.username.strip(),
@@ -308,11 +346,8 @@ async def create_driver(
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
     
-from sqlalchemy import or_
-from fastapi import Query
-from typing import List, Optional
 
-@router.put("/", response_model=DriverOut, status_code=status.HTTP_200_OK)
+@router.put("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_200_OK)
 async def update_driver(
     user_id: int = Form(...),
     form_data: DriverUpdate = Depends(),  # reuse schema, all fields should be Optional
@@ -461,7 +496,7 @@ async def update_driver(
         logger.exception("Unhandled exception in update_driver")
         raise HTTPException(status_code=500, detail="Unexpected error during driver update.")
 
-@router.get("/", response_model=List[DriverOut])
+@router.get("/{vendor_id}/drivers/", response_model=List[DriverOut])
 def get_drivers_by_vendor(
     vendor_id: int,
     skip: int = 0,
@@ -500,7 +535,7 @@ def get_drivers_by_vendor(
         logger.exception("Unexpected error while fetching drivers.")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching drivers.")
 
-@router.patch("/{driver_id}/status", response_model=DriverOut)
+@router.patch("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
 def toggle_driver_status(
     vendor_id: int,
     driver_id: int,
@@ -530,7 +565,7 @@ def toggle_driver_status(
         logger.error(f"Error toggling status: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-@router.put("/{driver_id}/status", response_model=DriverOut)
+@router.put("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
 def update_driver_status(
     vendor_id: int,
     driver_id: int,
