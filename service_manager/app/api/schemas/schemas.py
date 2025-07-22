@@ -537,11 +537,18 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class VendorOut(BaseModel):
+    vendor_id: int
+    vendor_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class DriverOut(BaseModel):
     driver_id: int
     uuid: UUID
-    vendor_id: int
-
+    # vendor_id: int
+    vendor: Optional[VendorOut] = None  # <-- Nested object for name
     user: UserOut
 
     city: Optional[str]
