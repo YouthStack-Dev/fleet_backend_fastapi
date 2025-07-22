@@ -974,7 +974,6 @@ def get_employee(db: Session, employee_code, tenant_id):
         logger.error(f"Exception while fetching employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Error during query execution")
 
-
 def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     try:
         logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
@@ -1028,10 +1027,11 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
             "employees": employee_list
         }
 
+    except HTTPException as e:
+        raise e  # Let FastAPI handle 404s
     except Exception as e:
         logger.exception("Unhandled exception in get_employee_by_department")
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
     try:
