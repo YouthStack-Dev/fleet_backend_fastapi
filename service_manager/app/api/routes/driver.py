@@ -24,34 +24,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 from sqlalchemy.orm import joinedload
 
-
 @router.get("/tenants/drivers/", response_model=List[DriverOut])
 def get_all_drivers_by_tenant(
     db: Session = Depends(get_db),
-    token_data: dict = Depends(PermissionChecker(["driver_management.read"]))
+    token_data: dict = Depends(PermissionChecker(["driver_management.read"])),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, le=500)  # restrict to avoid abuse
 ) -> List[DriverOut]:
     tenant_id = token_data.get("tenant_id")
-    try:
-        logger.info(f"Fetching all drivers for tenant_id: {tenant_id}")
+    logger.info(f"[DRIVER_FETCH] Start - tenant_id={tenant_id}, skip={skip}, limit={limit}")
 
+    try:
         drivers = (
             db.query(Driver)
             .join(Driver.vendor)
             .filter(Vendor.tenant_id == tenant_id)
-            .options(joinedload(Driver.user))  # eager-load user info
+            .options(joinedload(Driver.user))
+            .offset(skip)
+            .limit(limit)
             .all()
         )
 
-        logger.info(f"Found {len(drivers)} drivers for tenant_id: {tenant_id}")
+        logger.info(f"[DRIVER_FETCH] Success - tenant_id={tenant_id}, count={len(drivers)}")
 
         return [DriverOut.model_validate(driver) for driver in drivers]
 
-    except SQLAlchemyError as e:
-        logger.error(f"DB error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+    except SQLAlchemyError as db_err:
+        logger.exception(f"[DRIVER_FETCH] DB error - tenant_id={tenant_id}, error={db_err}")
         raise HTTPException(status_code=500, detail="Database error while fetching drivers.")
 
-    except Exception as e:
-        logger.exception(f"Unexpected error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+    except Exception as err:
+        logger.exception(f"[DRIVER_FETCH] Unexpected error - tenant_id={tenant_id}, error={err}")
         raise HTTPException(status_code=500, detail="Unexpected server error.")
 
 async def file_size_validator(
