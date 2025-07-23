@@ -449,10 +449,10 @@ class DriverBase(BaseModel):
 
 
 class DriverCreate(BaseModel):
-    username: str
+    name: str
     email: EmailStr
-    hashed_password: str
     mobile_number: str
+    hashed_password: str
 
     city: Optional[str]
     date_of_birth: Optional[date]
@@ -489,10 +489,10 @@ class DriverCreate(BaseModel):
     alternate_govt_id_doc_type: Optional[str]
 
 class DriverUpdate(BaseModel):
-    username: Optional[str]
-    email: Optional[EmailStr]
-    hashed_password: Optional[str]
-    mobile_number: Optional[str]
+    name: str
+    email: EmailStr
+    mobile_number: str
+    hashed_password: Optional[str] = None
 
     city: Optional[str]
     date_of_birth: Optional[date]
@@ -546,10 +546,13 @@ class VendorOut(BaseModel):
 
 class DriverOut(BaseModel):
     driver_id: int
-    uuid: UUID
+    driver_code: str  # Unique code for the driver
     # vendor_id: int
     vendor: Optional[VendorOut] = None  # <-- Nested object for name
-    user: UserOut
+
+    name: str
+    email: EmailStr
+    mobile_number: str
 
     city: Optional[str]
     date_of_birth: Optional[date]
