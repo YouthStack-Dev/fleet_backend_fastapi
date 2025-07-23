@@ -30,7 +30,7 @@ def get_all_drivers_by_tenant(
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.read"])),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, le=500)  # restrict to avoid abuse
+    limit: int = Query(100, le=500)
 ) -> List[DriverOut]:
     tenant_id = token_data.get("tenant_id")
     logger.info(f"[DRIVER_FETCH] Start - tenant_id={tenant_id}, skip={skip}, limit={limit}")
@@ -40,14 +40,12 @@ def get_all_drivers_by_tenant(
             db.query(Driver)
             .join(Driver.vendor)
             .filter(Vendor.tenant_id == tenant_id)
-            .options(joinedload(Driver.user))
             .offset(skip)
             .limit(limit)
             .all()
         )
 
         logger.info(f"[DRIVER_FETCH] Success - tenant_id={tenant_id}, count={len(drivers)}")
-
         return [DriverOut.model_validate(driver) for driver in drivers]
 
     except SQLAlchemyError as db_err:
@@ -87,22 +85,29 @@ async def file_size_validator(
         )
 
     return file
-def save_file(file: Optional[UploadFile], driver_uuid: str, doc_type: str) -> Optional[str]:
+def save_file(
+    file: Optional[UploadFile],
+    vendor_id: int,
+    driver_code: str,
+    doc_type: str
+) -> Optional[str]:
     if file and file.filename:
-        # Secure and unique filename
-        import uuid
-        safe_filename = f"{uuid.uuid4().hex}_{file.filename.replace(' ', '_')}"
-        folder_path = os.path.join("uploaded_files", "drivers", str(driver_uuid), doc_type)
+        # Get file extension from original filename
+        _, ext = os.path.splitext(file.filename)
+        ext = ext.lower().strip()  # normalize extension
+
+        # Construct safe filename: {driver_code}_{doc_type}.{ext}
+        safe_filename = f"{driver_code.strip()}_{doc_type.strip()}{ext}"
+
+        # New path: uploaded_files/vendors/{vendor_id}/drivers/{driver_code}/{doc_type}/{filename}
+        folder_path = os.path.join("uploaded_files", "vendors", str(vendor_id), "drivers", driver_code.strip(), doc_type)
         os.makedirs(folder_path, exist_ok=True)
 
-        # ✅ Construct full file path including the filename
         file_path = os.path.join(folder_path, safe_filename)
 
-        # Save the file content to disk
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        # Get relative path for DB, and full path for logs
         rel_path = os.path.relpath(file_path, start="uploaded_files")
         abs_path = os.path.abspath(file_path)
 
@@ -111,11 +116,13 @@ def save_file(file: Optional[UploadFile], driver_uuid: str, doc_type: str) -> Op
     else:
         logger.debug(f"No file provided for {doc_type}")
     return None
+
 @router.post("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
 async def create_driver(
     vendor_id: int,
     # form_data: DriverCreate = Depends(),
-    username: str = Form(...),
+    driver_code: str = Form(...),
+    name: str = Form(...),
     email: EmailStr = Form(...),
     hashed_password: str = Form(...),
     mobile_number: str = Form(...),
@@ -130,7 +137,6 @@ async def create_driver(
 
     bgv_status: Optional[str] = Form(...),
     bgv_date: Optional[date] = Form(...),
-    
 
     police_verification_status: Optional[str] = Form(...),
     police_verification_date: Optional[date] = Form(...),
@@ -213,8 +219,10 @@ async def create_driver(
 
 
         # Validation
-        if not username.strip():
-            raise HTTPException(status_code=422, detail="Username is required.")
+        if not name.strip():
+            raise HTTPException(status_code=422, detail="Name is required.")
+        if not driver_code.strip():
+            raise HTTPException(status_code=422, detail="Driver code is required.")
         if not email.strip():
             raise HTTPException(status_code=422, detail="Email is required.")
         if '@' not in email:
@@ -230,84 +238,59 @@ async def create_driver(
         vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
         if not vendor:
             raise HTTPException(status_code=404, detail="Vendor not found.")
-        tenant_id = vendor.tenant_id
 
-        # Reuse or create user
-        # Check if user already exists for this tenant
-        db_user = db.query(User).filter_by(email=email.strip(), tenant_id=vendor.tenant_id).first()
+    # Check if vendor exists
+        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found.")
+        
+        # Uniqueness Checks in drivers table
+        if db.query(Driver).filter_by(email=email.strip()).first():
+            raise HTTPException(status_code=409, detail="Email already exists.")
+        
+        if db.query(Driver).filter_by(mobile_number=mobile_number.strip()).first():
+            raise HTTPException(status_code=409, detail="Mobile number already exists.")
+        if db.query(Driver).filter_by(vendor_id=vendor_id, driver_code=driver_code.strip()).first():
+            raise HTTPException(status_code=409, detail=f"Driver code '{driver_code}' already exists for this vendor.")
 
-        if db_user:
-            # Make sure the user is not already a driver
-            existing_driver = db.query(Driver).filter_by(user_id=db_user.user_id).first()
-            if existing_driver:
-                raise HTTPException(status_code=409, detail="User already exists as a driver.")
-        else:
-                # Check mobile number before creating a new user
-            existing_mobile = db.query(User).filter(User.mobile_number == mobile_number.strip()).first()
-            if existing_mobile:
-                logger.warning(f"Mobile number {mobile_number} already exists.")
-                raise HTTPException(status_code=409, detail="Mobile number already exists.")
-            # Create new user
-            new_user = User(
-                username=username.strip(),
-                email=email.strip(),
-                mobile_number=mobile_number.strip(),
-                hashed_password=hash_password(hashed_password.strip()),  # ✅ hashed
-                tenant_id=vendor.tenant_id
-            )
-            db.add(new_user)
-            db.flush()
-            logger.info(f"User created successfully: {new_user.email}, id={new_user.user_id}")
-            db_user = new_user
-
-
-        # ✅ Safety check before using db_user
-        if not db_user:
-            logger.error("User creation failed or user not found.")
-            raise HTTPException(status_code=500, detail="User creation failed.")
-
-        # Now safe to use
-        user_id = db_user.user_id
-
-        # Save BGV Document
-
-
-
-        driver_uuid = str(uuid4())
-        bgv_doc_url = save_file(bgv_doc_file, driver_uuid, "bgv")
+        bgv_doc_url = save_file(bgv_doc_file, vendor_id, driver_code, "bgv")
         if bgv_doc_url:
             logger.info(f"BGV document saved at: {bgv_doc_url}")
-        police_verification_doc_file_url = save_file(police_verification_doc_file, driver_uuid, "police_verification")
+        police_verification_doc_file_url = save_file(police_verification_doc_file, vendor_id, driver_code, "police_verification")
         if police_verification_doc_file_url:
             logger.info(f"Police verification document saved at: {police_verification_doc_file_url}")
-        medical_verification_doc_file_url = save_file(medical_verification_doc_file, driver_uuid, "medical_verification")
+        medical_verification_doc_file_url = save_file(medical_verification_doc_file, vendor_id, driver_code, "medical_verification")
         if medical_verification_doc_file_url:
             logger.info(f"Medical verification document saved at: {medical_verification_doc_file_url}")
-        training_verification_doc_file_url = save_file(training_verification_doc_file, driver_uuid, "training_verification")
+        training_verification_doc_file_url = save_file(training_verification_doc_file, vendor_id, driver_code, "training_verification")
         if training_verification_doc_file_url:
             logger.info(f"Training verification document saved at: {training_verification_doc_file_url}")
-        eye_test_verification_doc_file_url = save_file(eye_test_verification_doc_file, driver_uuid, "eye_test_verification")
+        eye_test_verification_doc_file_url = save_file(eye_test_verification_doc_file, vendor_id, driver_code, "eye_test_verification")
         if eye_test_verification_doc_file_url:
             logger.info(f"Eye test verification document saved at: {eye_test_verification_doc_file_url}")
-        license_doc_file_url = save_file(license_doc_file, driver_uuid, "license")
+        license_doc_file_url = save_file(license_doc_file, vendor_id, driver_code, "license")
         if license_doc_file_url:
             logger.info(f"License document saved at: {license_doc_file_url}")
-        induction_doc_file_url = save_file(induction_doc_file, driver_uuid, "induction")
+        induction_doc_file_url = save_file(induction_doc_file, vendor_id, driver_code, "induction")
         if induction_doc_file_url:
             logger.info(f"Induction document saved at: {induction_doc_file_url}")
-        badge_doc_file_url = save_file(badge_doc_file, driver_uuid, "badge")
+        badge_doc_file_url = save_file(badge_doc_file, vendor_id, driver_code, "badge")
         if badge_doc_file_url:
             logger.info(f"Badge document saved at: {badge_doc_file_url}")
-        alternate_govt_id_doc_file_url = save_file(alternate_govt_id_doc_file, driver_uuid, "alternate_govt_id")
+        alternate_govt_id_doc_file_url = save_file(alternate_govt_id_doc_file, vendor_id, driver_code, "alternate_govt_id")
         if alternate_govt_id_doc_file_url:
             logger.info(f"Alternate government ID document saved at: {alternate_govt_id_doc_file_url}")
-        photo_image_url = save_file(photo_image, driver_uuid, "photo")
+        photo_image_url = save_file(photo_image, vendor_id, driver_code, "photo")
         if photo_image_url:
             logger.info(f"Photo image saved at: {photo_image_url}")
 
         # Create Driver
         new_driver = Driver(
-            user_id=db_user.user_id,
+            name=name.strip(),
+            email=email.strip(),
+            driver_code=driver_code.strip(),
+            mobile_number=mobile_number.strip(),
+            hashed_password=hash_password(hashed_password.strip()),
             vendor_id=vendor_id,
             alternate_mobile_number=alternate_mobile_number,
             city=city,
@@ -391,11 +374,12 @@ async def create_driver(
         raise HTTPException(status_code=500, detail="Unexpected error while creating driver.")
     
 
-@router.put("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_200_OK)
+@router.put("/{vendor_id}/drivers/{driver_id}", response_model=DriverOut, status_code=status.HTTP_200_OK)
 async def update_driver(
-    user_id: int = Form(...),
     # form_data: DriverUpdate = Depends(),  # reuse schema, all fields should be Optional
-    username: Optional[str] = Form(...),
+    driver_id: int,
+    vendor_id: int,
+    name: Optional[str] = Form(...),
     email: Optional[EmailStr] = Form(...),
     hashed_password: Optional[str] = Form(...),
     mobile_number: Optional[str] = Form(...),
@@ -448,78 +432,80 @@ async def update_driver(
     token_data: dict = Depends(PermissionChecker(["driver_management.update"]))
 ):
     try:
-        logger.info(f"Updating driver with user_id={user_id}")
-        driver = db.query(Driver).filter_by(user_id=user_id).first()
+        logger.info(f"[DRIVER_UPDATE] Attempting update: driver_id={driver_id}, vendor_id={vendor_id}")
+
+        # ✅ Ensure driver belongs to this vendor
+        driver = (
+            db.query(Driver)
+            .filter(Driver.driver_id == driver_id, Driver.vendor_id == vendor_id)
+            .first()
+        )
+
+        if not driver:
+            logger.warning(f"Driver ID {driver_id} not found for Vendor ID {vendor_id}")
+            raise HTTPException(status_code=404, detail="Driver not found for this vendor")
+        logger.info(f"[DRIVER_UPDATE] Attempt for driver_id={driver_id}")
+        driver = db.query(Driver).filter_by(driver_id=driver_id).first()
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found.")
 
-        driver_uuid = str(driver.uuid)
-        user = db.query(User).filter_by(user_id=user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found.")
-        # --- Update user fields if provided ---
-        if username and username != user.username:
-            existing_user = db.query(User).filter_by(username=username, tenant_id=user.tenant_id).first()
-            if existing_user and existing_user.user_id != user.user_id:
-                raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
-            user.username = username
+        # Check for unique email
+        if email and email != driver.email:
+            existing_email = db.query(Driver).filter(Driver.email == email).first()
+            if existing_email and existing_email.driver_id != driver.driver_id:
+                raise HTTPException(status_code=409, detail="Email already exists.")
 
-        if email and email != user.email:
-            existing_email = db.query(User).filter_by(email=email, tenant_id=user.tenant_id).first()
-            if existing_email and existing_email.user_id != user.user_id:
-                raise HTTPException(status_code=409, detail="Email already exists for this tenant.")
-            user.email = email
-
-        if mobile_number and mobile_number != user.mobile_number:
-            existing_mobile = db.query(User).filter_by(mobile_number=mobile_number).first()
-            if existing_mobile and existing_mobile.user_id != user.user_id:
+        # Check for unique mobile number
+        if mobile_number and mobile_number != driver.mobile_number:
+            existing_mobile = db.query(Driver).filter(Driver.mobile_number == mobile_number).first()
+            if existing_mobile and existing_mobile.driver_id != driver.driver_id:
                 raise HTTPException(status_code=409, detail="Mobile number already exists.")
-            user.mobile_number = mobile_number
 
         if hashed_password:
-            user.hashed_password = hash_password(hashed_password)
+            driver.hashed_password = hash_password(hashed_password)
 
         # Validate and save each file (if provided)
-        async def process_file(doc_file, doc_type, allowed_types):
+        # Upload files
+        async def process_file(doc_file, doc_type, allowed_types ,driver_code=None):
             if doc_file:
                 validated = await file_size_validator(doc_file, allowed_types=allowed_types)
-                return save_file(validated, driver_uuid, doc_type)
+                return  save_file(doc_file, vendor_id, driver_code, doc_type)
             return None
-
-        bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"])
+        # bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"])
+        bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"], driver.driver_code)
         if bgv_doc_url:
             logger.info(f"BGV document updated at: {bgv_doc_url}")
-        police_verification_doc_file_url = await process_file(police_verification_doc_file, "police_verification", ["application/pdf"])
+        police_verification_doc_file_url = await process_file(police_verification_doc_file, "police_verification", ["application/pdf"], driver.driver_code)
         if police_verification_doc_file_url:
             logger.info(f"Police verification document updated at: {police_verification_doc_file_url}")
-        medical_verification_doc_file_url = await process_file(medical_verification_doc_file, "medical_verification", ["application/pdf"])
+        medical_verification_doc_file_url = await process_file(medical_verification_doc_file, "medical_verification", ["application/pdf"], driver.driver_code)
         if medical_verification_doc_file_url:
             logger.info(f"Medical verification document updated at: {medical_verification_doc_file_url}")
-        training_verification_doc_file_url = await process_file(training_verification_doc_file, "training_verification", ["application/pdf"])
+        training_verification_doc_file_url = await process_file(training_verification_doc_file, "training_verification", ["application/pdf"], driver.driver_code)
         if training_verification_doc_file_url:
             logger.info(f"Training verification document updated at: {training_verification_doc_file_url}")
-        eye_test_verification_doc_file_url = await process_file(eye_test_verification_doc_file, "eye_test_verification", ["application/pdf"])
+        eye_test_verification_doc_file_url = await process_file(eye_test_verification_doc_file, "eye_test_verification", ["application/pdf"], driver.driver_code)
         if eye_test_verification_doc_file_url:
             logger.info(f"Eye test verification document updated at: {eye_test_verification_doc_file_url}")
-        license_doc_file_url = await process_file(license_doc_file, "license", ["application/pdf"])
+        license_doc_file_url = await process_file(license_doc_file, "license", ["application/pdf"], driver.driver_code)
         if license_doc_file_url:
             logger.info(f"License document updated at: {license_doc_file_url}")
-        induction_doc_file_url = await process_file(induction_doc_file, "induction", ["application/pdf"])
+        induction_doc_file_url = await process_file(induction_doc_file, "induction", ["application/pdf"], driver.driver_code)
         if induction_doc_file_url:
             logger.info(f"Induction document updated at: {induction_doc_file_url}")
-        badge_doc_file_url = await process_file(badge_doc_file, "badge", ["application/pdf"])
+        badge_doc_file_url = await process_file(badge_doc_file, "badge", ["application/pdf"], driver.driver_code)
         if badge_doc_file_url:
             logger.info(f"Badge document updated at: {badge_doc_file_url}")
-        alternate_govt_id_doc_file_url = await process_file(alternate_govt_id_doc_file, "alternate_govt_id", ["application/pdf"])
+        alternate_govt_id_doc_file_url = await process_file(alternate_govt_id_doc_file, "alternate_govt_id", ["application/pdf"], driver.driver_code)
         if alternate_govt_id_doc_file_url:
             logger.info(f"Alternate government ID document updated at: {alternate_govt_id_doc_file_url}")
-        photo_image_url = await process_file(photo_image, "photo", ["image/jpeg", "image/jpg", "image/png"])
+        photo_image_url = await process_file(photo_image, "photo", ["image/jpeg", "image/jpg", "image/png"], driver.driver_code)
         if photo_image_url:
             logger.info(f"Photo image updated at: {photo_image_url}")
 
         # Update fields only if provided
         update_fields = {
-            "username": username,
+            "name": name,
             "email": email,
             "mobile_number": mobile_number,
             "hashed_password": hashed_password,
@@ -567,7 +553,7 @@ async def update_driver(
 
         db.commit()
         db.refresh(driver)
-        logger.info(f"Driver updated successfully: user_id={user_id}")
+        logger.info(f"Driver updated successfully: driver_id={driver.driver_id}, email={driver.email}")
         return DriverOut.model_validate(driver, from_attributes=True)
 
     except HTTPException as e:
@@ -591,12 +577,11 @@ def get_drivers_by_vendor(
 ):
     try:
         logger.info(f"Fetching drivers for vendor_id={vendor_id} with filters: skip={skip}, limit={limit}, bgv_status={bgv_status}, search={search}")
-
         vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
         if not vendor:
             raise HTTPException(status_code=404, detail="Vendor not found.")
 
-        query = db.query(Driver).join(User).filter(Driver.vendor_id == vendor_id)
+        query = db.query(Driver).filter(Driver.vendor_id == vendor_id)
 
         if bgv_status:
             query = query.filter(Driver.bgv_status == bgv_status)
@@ -604,9 +589,10 @@ def get_drivers_by_vendor(
         if search:
             search_term = f"%{search.strip()}%"
             query = query.filter(or_(
-                User.username.ilike(search_term),
-                User.email.ilike(search_term)
+                Driver.driver_name.ilike(search_term),
+                Driver.email.ilike(search_term)
             ))
+
 
         drivers = query.offset(skip).limit(limit).all()
         return drivers
@@ -617,7 +603,7 @@ def get_drivers_by_vendor(
     except Exception as e:
         logger.exception("Unexpected error while fetching drivers.")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching drivers.")
-
+    
 @router.patch("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
 def toggle_driver_status(
     vendor_id: int,
@@ -644,9 +630,13 @@ def toggle_driver_status(
         logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {status}")
         return driver
 
+    except HTTPException as http_exc:
+        raise http_exc  # Don't override HTTPExceptions (like 404)
+
     except Exception as e:
-        logger.error(f"Error toggling status: {str(e)}")
+        logger.exception(f"Error toggling status: {str(e)}")  # Use exception() to log full stack
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 @router.put("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
 def update_driver_status(
@@ -656,20 +646,29 @@ def update_driver_status(
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.update"]))
 ):
-    driver = db.query(Driver).filter_by(driver_id=driver_id, vendor_id=vendor_id).first()
-    if not driver:
-        logger.warning(f"Driver ID {driver_id} not found for vendor ID {vendor_id}")
-        raise HTTPException(status_code=404, detail="Driver not found for this vendor")
+    try:
+        driver = db.query(Driver).filter_by(driver_id=driver_id, vendor_id=vendor_id).first()
+        if not driver:
+            logger.warning(f"Driver ID {driver_id} not found for vendor ID {vendor_id}")
+            raise HTTPException(status_code=404, detail="Driver not found for this vendor")
 
-    if driver.is_active == status.is_active:
-        current_state = "active" if status.is_active else "inactive"
-        logger.info(f"Driver {driver_id} is already {current_state}")
-        raise HTTPException(status_code=400, detail=f"Driver is already {current_state}")
+        if driver.is_active == status.is_active:
+            current_state = "active" if status.is_active else "inactive"
+            logger.info(f"Driver {driver_id} is already {current_state}")
+            raise HTTPException(status_code=400, detail=f"Driver is already {current_state}")
 
-    driver.is_active = status.is_active
-    db.commit()
-    db.refresh(driver)
+        driver.is_active = status.is_active
+        db.commit()
+        db.refresh(driver)
 
-    new_state = "activated" if driver.is_active else "deactivated"
-    logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {new_state}")
-    return driver
+        new_state = "activated" if driver.is_active else "deactivated"
+        logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {new_state}")
+        return driver
+
+    except HTTPException as http_exc:
+        raise http_exc  # Allow FastAPI to handle proper HTTPException responses
+    
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Unexpected error while toggling driver status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
