@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Boolean, Column, String, Integer, ForeignKey, DateTime, JSON, UniqueConstraint, Table, Date
+    Boolean, Column, String, Integer, ForeignKey, DateTime, JSON, Text, UniqueConstraint, Table, Date, text
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -55,7 +55,6 @@ class Tenant(Base, TimestampMixin):
     cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
     shifts = relationship("Shift", back_populates="tenant")
     vendors = relationship("Vendor", back_populates="tenant")
-    vehicles = relationship("Vehicle", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -294,29 +293,39 @@ class Vehicle(Base):
     __tablename__ = "vehicles"
 
     vehicle_id = Column(Integer, primary_key=True, index=True)
-    
-    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id", ondelete="CASCADE"), nullable=False)
+
     vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
-    driver_id = Column(Integer, ForeignKey("drivers.driver_id", ondelete="SET NULL"), nullable=True)
     vehicle_type_id = Column(Integer, ForeignKey("vehicle_types.vehicle_type_id", ondelete="SET NULL"), nullable=True)
+    driver_id = Column(Integer, ForeignKey("drivers.driver_id", ondelete="SET NULL"), nullable=True)
 
-    vehicle_code = Column(String, nullable=False, unique=True)  # app-managed code
-    reg_number = Column(String, nullable=False, unique=True)    # physical vehicle registration number
+    vehicle_code = Column(String, nullable=False, unique=True, comment="App-managed vehicle code")
+    reg_number = Column(String, nullable=False, unique=True, comment="Physical vehicle registration number")
 
-    is_active = Column(Boolean, default=True)
+    status = Column(String, nullable=False, default="ACTIVE", comment="Vehicle status like ACTIVE, INACTIVE, MAINTENANCE")
+
+    rc_card_url = Column(String, nullable=True, comment="URL to RC card document")
+    rc_expiry_date = Column(Date, nullable=True, comment="RC card expiry date")
+    insurance_expiry_date = Column(Date, nullable=True, comment="Insurance expiry date")
+    insurance_url = Column(String, nullable=True, comment="URL to insurance document")
+    permit_url = Column(String, nullable=True, comment="URL to permit document")
+    permit_expiry_date = Column(Date, nullable=True, comment="Permit expiry date")
+    pollution_expiry_date = Column(Date, nullable=True, comment="Pollution certificate expiry date")
+    pollution_url = Column(String, nullable=True, comment="URL to pollution certificate")
+    fitness_url = Column(String, nullable=True, comment="URL to fitness certificate")
+    fitness_expiry_date = Column(Date, nullable=True, comment="Fitness certificate expiry date")
+    tax_receipt_date = Column(Date, nullable=True, comment="Tax receipt date")
+    tax_receipt_url = Column(String, nullable=True, comment="URL to tax receipt")
+
+    description = Column(Text, nullable=True, comment="Optional description or remarks about the vehicle")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
     vendor = relationship("Vendor", back_populates="vehicles")
-    driver = relationship("Driver", back_populates="vehicles")
-    vehicle_type = relationship("VehicleType", back_populates="vehicles")
-    tenant = relationship("Tenant", back_populates="vehicles")
     driver = relationship("Driver", back_populates="vehicles", uselist=False)
-    
-import uuid
-from sqlalchemy.dialects.postgresql import UUID
+    vehicle_type = relationship("VehicleType", back_populates="vehicles")
+
 
 class Driver(Base):
     __tablename__ = "drivers"
@@ -324,7 +333,7 @@ class Driver(Base):
     driver_id = Column(Integer, primary_key=True, index=True)
     
     driver_code = Column(String(50), nullable=False)  # e.g., 'drv1', 'acm1'
-    
+
     # Unique fields managed within this table
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False, unique=True)
