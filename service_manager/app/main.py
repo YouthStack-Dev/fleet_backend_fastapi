@@ -14,6 +14,7 @@ from app.api.routes.shift import router as shift_router
 from app.api.routes.vendor import router as vendor_router
 from app.api.routes.vehicle_type import router as vehicle_type_router
 from app.api.routes.driver import router as driver_router
+from app.api.routes.vehicle import router as vehicle_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,6 +68,7 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestLoggerMiddleware)
 
+app.include_router(vehicle_router, prefix="/api/vehicles", tags=["vehicles"])
 app.include_router(driver_router, prefix="/api/vendors", tags=["drivers"])
 app.include_router(vehicle_type_router, prefix="/api/vehicle_types", tags=["vehicle_types"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])

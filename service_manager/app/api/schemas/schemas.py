@@ -607,3 +607,27 @@ class DriverOut(BaseModel):
         from_attributes=True,
         json_encoders={UUID: lambda v: str(v)}
     )
+class VehicleOut(BaseModel):
+    vehicle_id: int
+    vendor_id: int
+    vehicle_code: str
+    reg_number: str
+    vehicle_type_id: int
+    driver_id: Optional[int]
+    status: str
+    description: Optional[str]
+    rc_expiry_date: Optional[date]
+    insurance_expiry_date: Optional[date]
+    permit_expiry_date: Optional[date]
+    pollution_expiry_date: Optional[date]
+    fitness_expiry_date: Optional[date]
+    tax_receipt_date: Optional[date]
+
+    rc_card_url: Optional[str]
+    insurance_url: Optional[str]
+    permit_url: Optional[str]
+    pollution_url: Optional[str]
+    fitness_url: Optional[str]
+    tax_receipt_url: Optional[str]
+
+
