@@ -73,7 +73,7 @@ class User(Base, TimestampMixin):
     groups = relationship("Group", secondary=group_user, back_populates="users")
     roles = relationship("Role", secondary=user_role, back_populates="users")
     employee = relationship("Employee", back_populates="user", uselist=False)
-    driver = relationship("Driver", back_populates="user", uselist=False)
+    # driver = relationship("Driver", back_populates="user", uselist=False)
 class Department(Base, TimestampMixin):
     __tablename__ = 'departments'
 
@@ -323,9 +323,13 @@ class Driver(Base):
 
     driver_id = Column(Integer, primary_key=True, index=True)
     
-    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
-
-    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True)
+    driver_code = Column(String(50), nullable=False)  # e.g., 'drv1', 'acm1'
+    
+    # Unique fields managed within this table
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False, unique=True)
+    mobile_number = Column(String(20), nullable=False, unique=True)
+    hashed_password = Column(String(255), nullable=False)  # Stores hashed password
     vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
 
     city = Column(String(100), nullable=True)
@@ -378,6 +382,6 @@ class Driver(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
-    user = relationship("User", back_populates="driver")
+    # user = relationship("User", back_populates="driver")
     vendor = relationship("Vendor", back_populates="drivers")
     vehicles = relationship("Vehicle", back_populates="driver")
