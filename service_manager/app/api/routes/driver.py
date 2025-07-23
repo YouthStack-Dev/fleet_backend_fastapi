@@ -572,38 +572,59 @@ def get_drivers_by_vendor(
     limit: int = 10,
     bgv_status: Optional[str] = None,
     search: Optional[str] = Query(None, description="Search by username or email"),
+    driver_id: Optional[int] = None,
+    driver_code: Optional[str] = None,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.create", "driver_management.read"]))
 ):
     try:
-        logger.info(f"Fetching drivers for vendor_id={vendor_id} with filters: skip={skip}, limit={limit}, bgv_status={bgv_status}, search={search}")
+        logger.info(
+            f"Fetching drivers for vendor_id={vendor_id} with filters: skip={skip}, "
+            f"limit={limit}, bgv_status={bgv_status}, search={search}, "
+            f"driver_id={driver_id}, driver_code={driver_code}"
+        )
+
         vendor = db.query(Vendor).filter_by(vendor_id=vendor_id).first()
         if not vendor:
             raise HTTPException(status_code=404, detail="Vendor not found.")
 
         query = db.query(Driver).filter(Driver.vendor_id == vendor_id)
 
+        if driver_id:
+            query = query.filter(Driver.driver_id == driver_id)
+
+        if driver_code:
+            query = query.filter(Driver.driver_code == driver_code)
+
         if bgv_status:
             query = query.filter(Driver.bgv_status == bgv_status)
 
         if search:
             search_term = f"%{search.strip()}%"
-            query = query.filter(or_(
-                Driver.driver_name.ilike(search_term),
-                Driver.email.ilike(search_term)
-            ))
-
+            query = query.filter(
+                or_(
+                    Driver.driver_name.ilike(search_term),
+                    Driver.email.ilike(search_term)
+                )
+            )
 
         drivers = query.offset(skip).limit(limit).all()
-        return drivers
+        
 
+        if not drivers:
+            logger.warning("No drivers found for given filters.")
+            raise HTTPException(status_code=404, detail="No drivers found for the given filters.")
+
+        return drivers
+    except HTTPException as e:
+        raise e  # Allow FastAPI to handle it properly (don't override with 500)
     except SQLAlchemyError as e:
         logger.error(f"Database error: {str(e)}")
         raise HTTPException(status_code=500, detail="Database error while fetching drivers.")
     except Exception as e:
         logger.exception("Unexpected error while fetching drivers.")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching drivers.")
-    
+ 
 @router.patch("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
 def toggle_driver_status(
     vendor_id: int,
