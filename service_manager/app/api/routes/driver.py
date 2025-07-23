@@ -1,5 +1,6 @@
 import traceback
 from fastapi import APIRouter, Depends, status, Form, UploadFile, File, HTTPException
+from pydantic import EmailStr
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.api.schemas.schemas import DriverCreate, DriverOut, DriverUpdate,StatusUpdate
@@ -24,34 +25,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 from sqlalchemy.orm import joinedload
 
-
 @router.get("/tenants/drivers/", response_model=List[DriverOut])
 def get_all_drivers_by_tenant(
     db: Session = Depends(get_db),
-    token_data: dict = Depends(PermissionChecker(["driver_management.read"]))
+    token_data: dict = Depends(PermissionChecker(["driver_management.read"])),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, le=500)  # restrict to avoid abuse
 ) -> List[DriverOut]:
     tenant_id = token_data.get("tenant_id")
-    try:
-        logger.info(f"Fetching all drivers for tenant_id: {tenant_id}")
+    logger.info(f"[DRIVER_FETCH] Start - tenant_id={tenant_id}, skip={skip}, limit={limit}")
 
+    try:
         drivers = (
             db.query(Driver)
             .join(Driver.vendor)
             .filter(Vendor.tenant_id == tenant_id)
-            .options(joinedload(Driver.user))  # eager-load user info
+            .options(joinedload(Driver.user))
+            .offset(skip)
+            .limit(limit)
             .all()
         )
 
-        logger.info(f"Found {len(drivers)} drivers for tenant_id: {tenant_id}")
+        logger.info(f"[DRIVER_FETCH] Success - tenant_id={tenant_id}, count={len(drivers)}")
 
         return [DriverOut.model_validate(driver) for driver in drivers]
 
-    except SQLAlchemyError as e:
-        logger.error(f"DB error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+    except SQLAlchemyError as db_err:
+        logger.exception(f"[DRIVER_FETCH] DB error - tenant_id={tenant_id}, error={db_err}")
         raise HTTPException(status_code=500, detail="Database error while fetching drivers.")
 
-    except Exception as e:
-        logger.exception(f"Unexpected error while fetching drivers for tenant_id={tenant_id}: {str(e)}")
+    except Exception as err:
+        logger.exception(f"[DRIVER_FETCH] Unexpected error - tenant_id={tenant_id}, error={err}")
         raise HTTPException(status_code=500, detail="Unexpected server error.")
 
 async def file_size_validator(
@@ -110,7 +114,46 @@ def save_file(file: Optional[UploadFile], driver_uuid: str, doc_type: str) -> Op
 @router.post("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
 async def create_driver(
     vendor_id: int,
-    form_data: DriverCreate = Depends(),
+    # form_data: DriverCreate = Depends(),
+    username: str = Form(...),
+    email: EmailStr = Form(...),
+    hashed_password: str = Form(...),
+    mobile_number: str = Form(...),
+
+    city: Optional[str] = Form(...),
+    date_of_birth: Optional[date] = Form(...),
+    gender: Optional[str] = Form(...),
+
+    alternate_mobile_number: Optional[str] = Form(...),
+    permanent_address: Optional[str] = Form(...),
+    current_address: Optional[str] = Form(...),
+
+    bgv_status: Optional[str] = Form(...),
+    bgv_date: Optional[date] = Form(...),
+
+    police_verification_status: Optional[str] = Form(...),
+    police_verification_date: Optional[date] = Form(...),
+
+    medical_verification_status: Optional[str] = Form(...),
+    medical_verification_date: Optional[date] = Form(...),
+
+    training_verification_status: Optional[str] = Form(...),
+    training_verification_date: Optional[date] = Form(...),
+
+    eye_test_verification_status: Optional[str] = Form(...),
+    eye_test_verification_date: Optional[date] = Form(...),
+
+    license_number: Optional[str] = Form(...),
+    license_expiry_date: Optional[date] = Form(...),
+
+    induction_date: Optional[date] = Form(...),
+
+    badge_number: Optional[str] = Form(...),
+    badge_expiry_date: Optional[date] = Form(...),
+
+    alternate_govt_id: Optional[str] = Form(...),
+    alternate_govt_id_doc_type: Optional[str] = Form(...),
+
     bgv_doc_file: Optional[UploadFile] = None,
     police_verification_doc_file: Optional[UploadFile] = None,
     medical_verification_doc_file: Optional[UploadFile] = None,
@@ -126,7 +169,7 @@ async def create_driver(
 ):
 
     try:
-        logger.info(f"Creating driver for vendor_id={vendor_id} with email={form_data.email}")
+        logger.info(f"Creating driver for vendor_id={vendor_id} with email={email}")
         logger.info(f"Received form data: bgv_doc_file: {bgv_doc_file.filename if bgv_doc_file else 'None'},police_verification_doc_file: {police_verification_doc_file.filename if police_verification_doc_file else 'None'},medical_verification_doc_file: {medical_verification_doc_file.filename if medical_verification_doc_file else 'None'}, training_verification_doc_file: {training_verification_doc_file.filename if training_verification_doc_file else 'None'}, eye_test_verification_doc_file: {eye_test_verification_doc_file.filename if eye_test_verification_doc_file else 'None'}, license_doc_file: {license_doc_file.filename if license_doc_file else 'None'}, induction_doc_file: {induction_doc_file.filename if induction_doc_file else 'None'}, badge_doc_file: {badge_doc_file.filename if badge_doc_file else 'None'}, alternate_govt_id_doc_file: {alternate_govt_id_doc_file.filename if alternate_govt_id_doc_file else 'None'}, photo_image: {photo_image.filename if photo_image else 'None'}")
 
        # Validate file sizes if present
@@ -169,17 +212,17 @@ async def create_driver(
 
 
         # Validation
-        if not form_data.username.strip():
+        if not username.strip():
             raise HTTPException(status_code=422, detail="Username is required.")
-        if not form_data.email.strip():
+        if not email.strip():
             raise HTTPException(status_code=422, detail="Email is required.")
-        if '@' not in form_data.email:
+        if '@' not in email:
             raise HTTPException(status_code=422, detail="Invalid email format.")
-        if not form_data.mobile_number.strip():
+        if not mobile_number.strip():
             raise HTTPException(status_code=422, detail="Mobile number is required.")
-        if len(form_data.mobile_number) > 15:
+        if len(mobile_number) > 15:
             raise HTTPException(status_code=422, detail="Mobile number too long.")
-        if not form_data.hashed_password.strip():
+        if not hashed_password.strip():
             raise HTTPException(status_code=422, detail="Password is required.")
 
         # Vendor Check
@@ -190,7 +233,7 @@ async def create_driver(
 
         # Reuse or create user
         # Check if user already exists for this tenant
-        db_user = db.query(User).filter_by(email=form_data.email.strip(), tenant_id=vendor.tenant_id).first()
+        db_user = db.query(User).filter_by(email=email.strip(), tenant_id=vendor.tenant_id).first()
 
         if db_user:
             # Make sure the user is not already a driver
@@ -199,16 +242,16 @@ async def create_driver(
                 raise HTTPException(status_code=409, detail="User already exists as a driver.")
         else:
                 # Check mobile number before creating a new user
-            existing_mobile = db.query(User).filter(User.mobile_number == form_data.mobile_number.strip()).first()
+            existing_mobile = db.query(User).filter(User.mobile_number == mobile_number.strip()).first()
             if existing_mobile:
-                logger.warning(f"Mobile number {form_data.mobile_number} already exists.")
+                logger.warning(f"Mobile number {mobile_number} already exists.")
                 raise HTTPException(status_code=409, detail="Mobile number already exists.")
             # Create new user
             new_user = User(
-                username=form_data.username.strip(),
-                email=form_data.email.strip(),
-                mobile_number=form_data.mobile_number.strip(),
-                hashed_password=hash_password(form_data.hashed_password.strip()),  # ✅ hashed
+                username=username.strip(),
+                email=email.strip(),
+                mobile_number=mobile_number.strip(),
+                hashed_password=hash_password(hashed_password.strip()),  # ✅ hashed
                 tenant_id=vendor.tenant_id
             )
             db.add(new_user)
@@ -265,57 +308,57 @@ async def create_driver(
         new_driver = Driver(
             user_id=db_user.user_id,
             vendor_id=vendor_id,
-            alternate_mobile_number=form_data.alternate_mobile_number,
-            city=form_data.city,
-            date_of_birth=form_data.date_of_birth,
-            gender=form_data.gender,
-            permanent_address=form_data.permanent_address,
-            current_address=form_data.current_address,
+            alternate_mobile_number=alternate_mobile_number,
+            city=city,
+            date_of_birth=date_of_birth,
+            gender=gender,
+            permanent_address=permanent_address,
+            current_address=current_address,
             photo_url=photo_image_url,
 
             # ✅ BGV
-            bgv_status=form_data.bgv_status,
-            bgv_date=form_data.bgv_date,
+            bgv_status=bgv_status,
+            bgv_date=bgv_date,
             bgv_doc_url=bgv_doc_url,
 
             # ✅ Police Verification
-            police_verification_status=form_data.police_verification_status,
-            police_verification_date=form_data.police_verification_date,
+            police_verification_status=police_verification_status,
+            police_verification_date=police_verification_date,
             police_verification_doc_url=police_verification_doc_file_url,
 
             # ✅ Medical Verification
-            medical_verification_status=form_data.medical_verification_status,
-            medical_verification_date=form_data.medical_verification_date,
+            medical_verification_status=medical_verification_status,
+            medical_verification_date=medical_verification_date,
             medical_verification_doc_url=medical_verification_doc_file_url,
 
             # ✅ Training Verification
-            training_verification_status=form_data.training_verification_status,
-            training_verification_date=form_data.training_verification_date,
+            training_verification_status=training_verification_status,
+            training_verification_date=training_verification_date,
             training_verification_doc_url=training_verification_doc_file_url,
 
             # ✅ Eye Test
-            eye_test_verification_status=form_data.eye_test_verification_status,
-            eye_test_verification_date=form_data.eye_test_verification_date,
+            eye_test_verification_status=eye_test_verification_status,
+            eye_test_verification_date=eye_test_verification_date,
             eye_test_verification_doc_url=eye_test_verification_doc_file_url,
 
             # ✅ License
-            license_number=form_data.license_number,
-            license_expiry_date=form_data.license_expiry_date,
+            license_number=license_number,
+            license_expiry_date=license_expiry_date,
             license_doc_url=license_doc_file_url,
 
 
             # ✅ Induction
-            induction_date=form_data.induction_date,
+            induction_date=induction_date,
             induction_doc_url=induction_doc_file_url,
 
             # ✅ Badge
-            badge_number=form_data.badge_number,
-            badge_expiry_date=form_data.badge_expiry_date,
+            badge_number=badge_number,
+            badge_expiry_date=badge_expiry_date,
             badge_doc_url=badge_doc_file_url,
 
             # ✅ Alternate Govt ID
-            alternate_govt_id=form_data.alternate_govt_id,
-            alternate_govt_id_doc_type=form_data.alternate_govt_id_doc_type,
+            alternate_govt_id=alternate_govt_id,
+            alternate_govt_id_doc_type=alternate_govt_id_doc_type,
             alternate_govt_id_doc_url=alternate_govt_id_doc_file_url,
         )
 
@@ -350,7 +393,46 @@ async def create_driver(
 @router.put("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_200_OK)
 async def update_driver(
     user_id: int = Form(...),
-    form_data: DriverUpdate = Depends(),  # reuse schema, all fields should be Optional
+    # form_data: DriverUpdate = Depends(),  # reuse schema, all fields should be Optional
+    username: Optional[str] = Form(...),
+    email: Optional[EmailStr] = Form(...),
+    hashed_password: Optional[str] = Form(...),
+    mobile_number: Optional[str] = Form(...),
+
+    city: Optional[str] = Form(...),
+    date_of_birth: Optional[date] = Form(...),
+    gender: Optional[str] = Form(...),
+
+    alternate_mobile_number: Optional[str] = Form(...),
+    permanent_address: Optional[str] = Form(...),
+    current_address: Optional[str] = Form(...),
+
+    bgv_status: Optional[str] = Form(...),
+    bgv_date: Optional[date] = Form(...),
+
+    police_verification_status: Optional[str] = Form(...),
+    police_verification_date: Optional[date] = Form(...),
+
+    medical_verification_status: Optional[str] = Form(...),
+    medical_verification_date: Optional[date] = Form(...),
+
+    training_verification_status: Optional[str] = Form(...),
+    training_verification_date: Optional[date] = Form(...),
+
+    eye_test_verification_status: Optional[str] = Form(...),
+    eye_test_verification_date: Optional[date] = Form(...),
+
+    license_number: Optional[str] = Form(...),
+    license_expiry_date: Optional[date] = Form(...),
+
+    induction_date: Optional[date] = Form(...),
+
+    badge_number: Optional[str] = Form(...),
+    badge_expiry_date: Optional[date] = Form(...),
+
+    alternate_govt_id: Optional[str] = Form(...),
+    alternate_govt_id_doc_type: Optional[str] = Form(...),
+
     bgv_doc_file: Optional[UploadFile] = None,
     police_verification_doc_file: Optional[UploadFile] = None,
     medical_verification_doc_file: Optional[UploadFile] = None,
@@ -375,26 +457,26 @@ async def update_driver(
         if not user:
             raise HTTPException(status_code=404, detail="User not found.")
         # --- Update user fields if provided ---
-        if form_data.username and form_data.username != user.username:
-            existing_user = db.query(User).filter_by(username=form_data.username, tenant_id=user.tenant_id).first()
+        if username and username != user.username:
+            existing_user = db.query(User).filter_by(username=username, tenant_id=user.tenant_id).first()
             if existing_user and existing_user.user_id != user.user_id:
                 raise HTTPException(status_code=409, detail="Username already exists for this tenant.")
-            user.username = form_data.username
+            user.username = username
 
-        if form_data.email and form_data.email != user.email:
-            existing_email = db.query(User).filter_by(email=form_data.email, tenant_id=user.tenant_id).first()
+        if email and email != user.email:
+            existing_email = db.query(User).filter_by(email=email, tenant_id=user.tenant_id).first()
             if existing_email and existing_email.user_id != user.user_id:
                 raise HTTPException(status_code=409, detail="Email already exists for this tenant.")
-            user.email = form_data.email
+            user.email = email
 
-        if form_data.mobile_number and form_data.mobile_number != user.mobile_number:
-            existing_mobile = db.query(User).filter_by(mobile_number=form_data.mobile_number).first()
+        if mobile_number and mobile_number != user.mobile_number:
+            existing_mobile = db.query(User).filter_by(mobile_number=mobile_number).first()
             if existing_mobile and existing_mobile.user_id != user.user_id:
                 raise HTTPException(status_code=409, detail="Mobile number already exists.")
-            user.mobile_number = form_data.mobile_number
+            user.mobile_number = mobile_number
 
-        if form_data.hashed_password:
-            user.hashed_password = hash_password(form_data.hashed_password)
+        if hashed_password:
+            user.hashed_password = hash_password(hashed_password)
 
         # Validate and save each file (if provided)
         async def process_file(doc_file, doc_type, allowed_types):
@@ -436,33 +518,33 @@ async def update_driver(
 
         # Update fields only if provided
         update_fields = {
-            "username": form_data.username,
-            "email": form_data.email,
-            "mobile_number": form_data.mobile_number,
-            "hashed_password": form_data.hashed_password,
-            "alternate_mobile_number": form_data.alternate_mobile_number,
-            "city": form_data.city,
-            "date_of_birth": form_data.date_of_birth,
-            "gender": form_data.gender,
-            "permanent_address": form_data.permanent_address,
-            "current_address": form_data.current_address,
-            "bgv_status": form_data.bgv_status,
-            "bgv_date": form_data.bgv_date,
-            "police_verification_status": form_data.police_verification_status,
-            "police_verification_date": form_data.police_verification_date,
-            "medical_verification_status": form_data.medical_verification_status,
-            "medical_verification_date": form_data.medical_verification_date,
-            "training_verification_status": form_data.training_verification_status,
-            "training_verification_date": form_data.training_verification_date,
-            "eye_test_verification_status": form_data.eye_test_verification_status,
-            "eye_test_verification_date": form_data.eye_test_verification_date,
-            "license_number": form_data.license_number,
-            "license_expiry_date": form_data.license_expiry_date,
-            "induction_date": form_data.induction_date,
-            "badge_number": form_data.badge_number,
-            "badge_expiry_date": form_data.badge_expiry_date,
-            "alternate_govt_id": form_data.alternate_govt_id,
-            "alternate_govt_id_doc_type": form_data.alternate_govt_id_doc_type
+            "username": username,
+            "email": email,
+            "mobile_number": mobile_number,
+            "hashed_password": hashed_password,
+            "alternate_mobile_number": alternate_mobile_number,
+            "city": city,
+            "date_of_birth": date_of_birth,
+            "gender": gender,
+            "permanent_address": permanent_address,
+            "current_address": current_address,
+            "bgv_status": bgv_status,
+            "bgv_date": bgv_date,
+            "police_verification_status": police_verification_status,
+            "police_verification_date": police_verification_date,
+            "medical_verification_status": medical_verification_status,
+            "medical_verification_date": medical_verification_date,
+            "training_verification_status": training_verification_status,
+            "training_verification_date": training_verification_date,
+            "eye_test_verification_status": eye_test_verification_status,
+            "eye_test_verification_date": eye_test_verification_date,
+            "license_number": license_number,
+            "license_expiry_date": license_expiry_date,
+            "induction_date": induction_date,
+            "badge_number": badge_number,
+            "badge_expiry_date": badge_expiry_date,
+            "alternate_govt_id": alternate_govt_id,
+            "alternate_govt_id_doc_type": alternate_govt_id_doc_type
         }
 
         # Set non-empty form fields
