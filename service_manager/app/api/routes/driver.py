@@ -130,6 +130,7 @@ async def create_driver(
 
     bgv_status: Optional[str] = Form(...),
     bgv_date: Optional[date] = Form(...),
+    
 
     police_verification_status: Optional[str] = Form(...),
     police_verification_date: Optional[date] = Form(...),
