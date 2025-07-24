@@ -631,3 +631,11 @@ class VehicleOut(BaseModel):
     tax_receipt_url: Optional[str]
 
 
+class EmployeeLoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user_id: int
+    employee_code: Optional[str]
+    username: Optional[str]
+    department_id: Optional[int]
+    department_name: Optional[str]
