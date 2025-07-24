@@ -23,7 +23,7 @@ from common_utils.auth.permission_checker import PermissionChecker
 from common_utils.auth.utils import hash_password
 from typing import Callable, Optional
 import io
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from fastapi import Query
 from typing import List, Optional
 from sqlalchemy.orm import selectinload
@@ -387,3 +387,69 @@ async def update_vehicle(
         db.rollback()
         logger.exception("Unhandled error in vehicle update: %s", str(e))
         raise HTTPException(status_code=500, detail="Unexpected error while updating vehicle.")
+
+@router.get("/vehicles/", response_model=List[VehicleOut])
+def get_vehicles(
+    vendor_id: Optional[int] = Query(None),
+    driver_id: Optional[int] = Query(None),
+    vehicle_id: Optional[int] = Query(None),
+    vehicle_code: Optional[str] = Query(None),
+    vehicle_type_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),  # ACTIVE / INACTIVE
+
+    limit: int = Query(10, ge=1),
+    offset: int = Query(0, ge=0),
+
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["vehicle_management.read"]))
+):
+    tenant_id = token_data.get("tenant_id")
+
+    try:
+        logger.info("Fetching vehicles with filters: "
+                    f"tenant_id={tenant_id}, vendor_id={vendor_id}, driver_id={driver_id}, "
+                    f"vehicle_id={vehicle_id}, vehicle_code={vehicle_code}, vehicle_type_id={vehicle_type_id}, "
+                    f"status={status}, limit={limit}, offset={offset}")
+
+        query = db.query(Vehicle).join(Vendor).filter(Vendor.tenant_id == tenant_id)
+
+        # Apply filters
+        if vendor_id is not None:
+            query = query.filter(Vehicle.vendor_id == vendor_id)
+
+        if driver_id is not None:
+            query = query.filter(Vehicle.driver_id == driver_id)
+
+        if vehicle_id is not None:
+            query = query.filter(Vehicle.vehicle_id == vehicle_id)
+
+        if vehicle_code is not None:
+            query = query.filter(Vehicle.vehicle_code.ilike(f"%{vehicle_code.strip()}%"))
+
+        if vehicle_type_id is not None:
+            query = query.filter(Vehicle.vehicle_type_id == vehicle_type_id)
+
+        if status:
+            query = query.filter(func.lower(Vehicle.status) == status.strip().lower())
+
+
+        total = query.count()
+        vehicles = query.offset(offset).limit(limit).all()
+
+        if not vehicles:
+            logger.warning("No vehicles found for given filters.")
+            raise HTTPException(status_code=404, detail="No vehicles found for the given filters.")     
+           
+        logger.info(f"Found {len(vehicles)} of {total} total vehicles matching filters.")
+        return vehicles
+    except HTTPException as e:
+        logger.warning(f"HTTPException: {e.detail}")
+        raise e  # DO NOT LOG AGAIN IN GENERAL EXCEPTION
+    
+    except SQLAlchemyError as e:
+        logger.error(f"SQLAlchemyError while fetching vehicles: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching vehicles.")
+
+    except Exception as e:
+        logger.exception("Unhandled error while fetching vehicles")
+        raise HTTPException(status_code=500, detail="Unexpected error while fetching vehicles.")
