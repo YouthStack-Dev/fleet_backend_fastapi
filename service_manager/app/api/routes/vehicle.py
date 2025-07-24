@@ -237,3 +237,153 @@ async def create_vehicle(
         traceback.print_exc()
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating vehicle.")
+
+@router.put("/{vendor_id}/vehicles/{vehicle_id}/", response_model=VehicleOut)
+async def update_vehicle(
+    request: Request,
+    vendor_id: int,
+    vehicle_id: int,
+    vehicle_code: str = Form(...),
+    reg_number: str = Form(...),
+    vehicle_type_id: int = Form(...),
+    status: str = Form(...),
+    description: Optional[str] = Form(None),
+
+    driver_id: Optional[int] = Form(None),
+
+    rc_expiry_date: Optional[date] = Form(None),
+    insurance_expiry_date: Optional[date] = Form(None),
+    permit_expiry_date: Optional[date] = Form(None),
+    pollution_expiry_date: Optional[date] = Form(None),
+    fitness_expiry_date: Optional[date] = Form(None),
+    tax_receipt_date: Optional[date] = Form(None),
+
+    rc_card_file: Optional[UploadFile] = File(None),
+    insurance_file: Optional[UploadFile] = File(None),
+    permit_file: Optional[UploadFile] = File(None),
+    pollution_file: Optional[UploadFile] = File(None),
+    fitness_file: Optional[UploadFile] = File(None),
+    tax_receipt_file: Optional[UploadFile] = File(None),
+
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["vehicle_management.update"]))
+):
+    tenant_id = token_data.get("tenant_id")
+    try:
+        logger.info(f"Updating vehicle_id={vehicle_id} for vendor_id={vendor_id}")
+
+        # Fetch vehicle
+        vehicle = (
+            db.query(Vehicle)
+            .filter_by(vehicle_id=vehicle_id, vendor_id=vendor_id)
+            .first()
+        )
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found.")
+
+        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id, tenant_id=tenant_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found or unauthorized.")
+
+        # Uniqueness checks for update
+        if (
+            db.query(Vehicle)
+            .filter(Vehicle.vehicle_code == vehicle_code.strip(), Vehicle.vendor_id == vendor_id, Vehicle.vehicle_id != vehicle_id)
+            .first()
+        ):
+            raise HTTPException(status_code=409, detail="Vehicle code already exists.")
+
+        if (
+            db.query(Vehicle)
+            .filter(Vehicle.reg_number == reg_number.strip(), Vehicle.vendor_id == vendor_id, Vehicle.vehicle_id != vehicle_id)
+            .first()
+        ):
+            raise HTTPException(status_code=409, detail="Registration number already exists.")
+
+        if status.strip().upper() not in {"ACTIVE", "INACTIVE"}:
+            raise HTTPException(status_code=400, detail="Invalid status value.")
+
+        # Driver assignment check
+        if driver_id is not None:
+            existing_assignment = (
+                db.query(Vehicle)
+                .filter(Vehicle.driver_id == driver_id, Vehicle.vehicle_id != vehicle_id)
+                .first()
+            )
+            if existing_assignment:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Driver is already assigned to another vehicle: {existing_assignment.vehicle_code}",
+                )
+
+        # File processing helper
+        async def process_file(doc_file, doc_type, allowed_types, vehicle_code):
+            if doc_file:
+                validated = await file_size_validator(doc_file, allowed_types=allowed_types)
+                return save_file(doc_file, vendor_id, vehicle_code, doc_type)
+            return None
+
+        # Update fields
+        vehicle.vehicle_code = vehicle_code.strip()
+        vehicle.reg_number = reg_number.strip()
+        vehicle.vehicle_type_id = vehicle_type_id
+        vehicle.driver_id = driver_id
+        vehicle.status = status.strip()
+        vehicle.description = description
+
+        vehicle.rc_expiry_date = rc_expiry_date
+        vehicle.insurance_expiry_date = insurance_expiry_date
+        vehicle.permit_expiry_date = permit_expiry_date
+        vehicle.pollution_expiry_date = pollution_expiry_date
+        vehicle.fitness_expiry_date = fitness_expiry_date
+        vehicle.tax_receipt_date = tax_receipt_date
+
+        # Update documents only if new ones provided
+        rc_card_url = await process_file(rc_card_file, "rc_card", ["application/pdf"], vehicle_code)
+        if rc_card_url:
+            vehicle.rc_card_url = rc_card_url
+
+        insurance_url = await process_file(insurance_file, "insurance", ["application/pdf"], vehicle_code)
+        if insurance_url:
+            vehicle.insurance_url = insurance_url
+
+        permit_url = await process_file(permit_file, "permit", ["application/pdf"], vehicle_code)
+        if permit_url:
+            vehicle.permit_url = permit_url
+
+        pollution_url = await process_file(pollution_file, "pollution", ["application/pdf"], vehicle_code)
+        if pollution_url:
+            vehicle.pollution_url = pollution_url
+
+        fitness_url = await process_file(fitness_file, "fitness", ["application/pdf"], vehicle_code)
+        if fitness_url:
+            vehicle.fitness_url = fitness_url
+
+        tax_receipt_url = await process_file(tax_receipt_file, "tax_receipt", ["application/pdf"], vehicle_code)
+        if tax_receipt_url:
+            vehicle.tax_receipt_url = tax_receipt_url
+
+        db.commit()
+        db.refresh(vehicle)
+
+        logger.info(f"Vehicle {vehicle_code} updated successfully.")
+        return vehicle
+
+    except IntegrityError as e:
+        db.rollback()
+        if "vehicles_driver_id_fkey" in str(e.orig):
+            raise HTTPException(status_code=400, detail="Invalid driver_id.")
+        logger.error(f"IntegrityError: {str(e.orig)}")
+        raise HTTPException(status_code=400, detail="Integrity error while updating vehicle.")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"SQLAlchemyError: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while updating vehicle.")
+    except HTTPException as e:
+        db.rollback()
+        logger.warning(f"HTTPException: {e.detail}")
+        raise e
+    except Exception as e:
+        db.rollback()
+        logger.exception("Unhandled error in vehicle update: %s", str(e))
+        raise HTTPException(status_code=500, detail="Unexpected error while updating vehicle.")
