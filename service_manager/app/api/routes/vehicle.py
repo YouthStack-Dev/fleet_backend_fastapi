@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 from typing import Optional
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException, Response, UploadFile
 import traceback
 from fastapi import APIRouter, Depends, status, Form, UploadFile, File, HTTPException, Request
 from pydantic import EmailStr
@@ -453,3 +453,48 @@ def get_vehicles(
     except Exception as e:
         logger.exception("Unhandled error while fetching vehicles")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching vehicles.")
+
+from fastapi.responses import JSONResponse
+
+@router.delete("/{vendor_id}/vehicles/{vehicle_id}/", response_class=JSONResponse, status_code=status.HTTP_200_OK)
+def delete_vehicle(
+    vendor_id: int,
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["vehicle_management.delete"]))
+):
+    tenant_id = token_data.get("tenant_id")
+    try:
+        logger.info(f"Attempting to delete vehicle_id={vehicle_id} for vendor_id={vendor_id}, tenant_id={tenant_id}")
+
+        vendor = db.query(Vendor).filter_by(vendor_id=vendor_id, tenant_id=tenant_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found or unauthorized.")
+
+        vehicle = db.query(Vehicle).filter_by(vehicle_id=vehicle_id, vendor_id=vendor_id).first()
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehicle not found.")
+
+        db.delete(vehicle)
+        db.commit()
+
+        logger.info(f"Vehicle with ID {vehicle_id} deleted successfully.")
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Vehicle deleted successfully",
+                "vehicle_id": vehicle_id
+            }
+        )
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"SQLAlchemy error while deleting vehicle: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while deleting vehicle.")
+    except HTTPException as e:
+        logger.warning(f"HTTPException: {e.detail}")
+        raise e
+    except Exception as e:
+        db.rollback()
+        logger.exception("Unhandled error during vehicle deletion")
+        raise HTTPException(status_code=500, detail="Unexpected error while deleting vehicle.")
