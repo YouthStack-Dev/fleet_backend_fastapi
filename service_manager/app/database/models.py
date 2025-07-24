@@ -394,3 +394,17 @@ class Driver(Base):
     # user = relationship("User", back_populates="driver")
     vendor = relationship("Vendor", back_populates="drivers")
     vehicles = relationship("Vehicle", back_populates="driver")
+
+
+# Note: The Device model is used to manage devices associated with users, such as mobile devices for push notifications.
+class Device(Base, TimestampMixin):
+    __tablename__ = "devices"
+
+    device_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
+    device_uuid = Column(String(255), nullable=False)
+    access_token = Column(String(512), nullable=True)
+    device_name = Column(String(255), nullable=True)
+    fcm_token = Column(String(512), nullable=True)  # Optional for push notifications
+
+    user = relationship("User", backref="device", uselist=False)
