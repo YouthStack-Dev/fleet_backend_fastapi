@@ -68,7 +68,7 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestLoggerMiddleware)
 
-app.include_router(vehicle_router, prefix="/api/vehicles", tags=["vehicles"])
+app.include_router(vehicle_router, prefix="/api/vendors", tags=["vehicles"])
 app.include_router(driver_router, prefix="/api/vendors", tags=["drivers"])
 app.include_router(vehicle_type_router, prefix="/api/vehicle_types", tags=["vehicle_types"])
 app.include_router(tenant_router, prefix="/api/tenants", tags=["tenants"])
