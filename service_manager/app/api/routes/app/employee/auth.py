@@ -1,5 +1,7 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional, List, Annotated, Dict
@@ -10,7 +12,7 @@ from app.database.database import get_db
 from app.crud import crud
 from app.api.schemas.schemas import EmployeeLoginResponse
 from common_utils.auth.utils import hash_password , verify_password
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/employees/auth", tags=["employee Authentication"])
 
 # Config
@@ -32,17 +34,52 @@ def authenticate_user(db: Session, email: str, password: str):
 def create_access_token(
     user_id: str,
     tenant_id: str,
+    department_id: Optional[str] = None,
+    department_name: Optional[str] = None,
+    employee_code: Optional[str] = None,
+    username: Optional[str] = None,
     expires_delta: Optional[timedelta] = None
 ) -> str:
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     payload = {
         "user_id": user_id,
         "tenant_id": tenant_id,
+        "department_id": department_id,
+        "department_name": department_name,
+        "employee_code": employee_code,
+        "username": username,
         "token_type": "access",
         "exp": expire,
         "iat": datetime.utcnow()
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+from fastapi.security import OAuth2PasswordBearer
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/employees/auth/token")
+class PermissionChecker:
+    def __init__(self, required_permissions: List[str]):
+        self.required_permissions = required_permissions
+
+    def __call__(self, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Dict:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("user_id")
+            tenant_id = payload.get("tenant_id")
+            role = payload.get("role")
+
+            if user_id is None or tenant_id is None:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+
+            # Optional: Add permission validation logic here
+            if self.required_permissions:
+                # Validate user permissions from DB (if applicable)
+                pass
+
+            return {"user_id": user_id, "tenant_id": tenant_id, "role": role}
+
+        except JWTError as e:
+            logging.error(f"JWT decode failed: {str(e)}")
+            raise HTTPException(status_code=401, detail="Invalid token")
 
 # ----------------------- Login Endpoint -----------------------
 from app.database.models import Device  # or wherever your Device model is
@@ -73,6 +110,11 @@ def employee_login(
         access_token = create_access_token(
             user_id=user.user_id,
             tenant_id=user.tenant_id,
+            department_id=user.employee.department_id if user.employee else None,
+            department_name=user.employee.department.department_name if user.employee and user.employee.department else None,
+            employee_code=user.employee.employee_code if user.employee else None,
+            username=user.username if user else None
+
         )
 
         if existing_device:
