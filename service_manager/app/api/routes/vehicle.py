@@ -27,7 +27,6 @@ from sqlalchemy import func, or_
 from fastapi import Query
 from typing import List, Optional
 from sqlalchemy.orm import selectinload
-logger = logging.getLogger(__name__)
 router = APIRouter()
 from sqlalchemy.orm import joinedload
 
