@@ -639,3 +639,18 @@ class EmployeeLoginResponse(BaseModel):
     username: Optional[str]
     department_id: Optional[int]
     department_name: Optional[str]
+
+
+class ShiftResponse(BaseModel):
+    shift_id: int
+    shift_code: str
+    log_type: str  # "in" or "out"
+    shift_time: time
+    day: str  # e.g., "Monday"
+    waiting_time_minutes: Optional[int]
+    pickup_type: Optional[str]  # "pickup" or "nodal"
+    gender: Optional[str]
+    is_active: bool
+
+    class Config:
+        from_attributes = True
