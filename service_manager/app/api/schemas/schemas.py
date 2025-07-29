@@ -102,7 +102,7 @@ class EmployeeBase(BaseModel):
     department_id: int  # Added to Base as it's required for both create & update
 
 class EmployeeCreate(EmployeeBase):
-    username: str
+    name: str
     email: str
     mobile_number: str
     hashed_password: str
@@ -126,8 +126,8 @@ class EmployeeUpdate(BaseModel):
 
 class EmployeeRead(EmployeeBase):
     employee_code: str
-    user_id: int
-    username: str
+    employee_id: int
+    name: str
     mobile_number: str
     email: str
     department_name: Optional[str] = None
@@ -137,8 +137,8 @@ class EmployeeRead(EmployeeBase):
 
 class EmployeeResponse(BaseModel):
     employee_code: str
-    username: str
-    user_id: int
+    employee_id: int
+    name: str
     email: str
     gender: Optional[str] = None
     mobile_number: str

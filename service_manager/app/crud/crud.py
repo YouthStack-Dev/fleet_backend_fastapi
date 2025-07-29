@@ -8,6 +8,8 @@ from app.crud.errors import handle_integrity_error
 from app.database.models import Department
 from fastapi import HTTPException
 
+from common_utils.auth.utils import hash_password
+
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
     try:
@@ -754,9 +756,9 @@ def create_employee(db: Session, employee, tenant_id):
         logger.info(f"Creating employee for tenant_id: {tenant_id}, payload: {employee.dict()}")
 
         # --------- Required field validations ---------
-        if not employee.username or not employee.username.strip():
-            logger.warning("Missing username in payload")
-            raise HTTPException(status_code=422, detail="Username is required.")
+        if not employee.name or not employee.name.strip():
+            logger.warning("Missing name in payload")
+            raise HTTPException(status_code=422, detail="Name is required.")
 
         if not employee.employee_code or not employee.employee_code.strip():
             logger.warning("Missing employee_code in payload")
@@ -769,6 +771,7 @@ def create_employee(db: Session, employee, tenant_id):
         if not employee.mobile_number or not employee.mobile_number.strip():
             logger.warning("Missing mobile_number in payload")
             raise HTTPException(status_code=422, detail="Mobile number is required.")
+
         # --------- Validate special_need logic ---------
         allowed_special_needs = ['pregnancy', 'others', 'none', None]
         special_need = employee.special_need.lower() if employee.special_need else None
@@ -777,7 +780,6 @@ def create_employee(db: Session, employee, tenant_id):
             logger.warning(f"Invalid special_need value: {employee.special_need}")
             raise HTTPException(status_code=422, detail="Invalid special_need. Allowed values are: pregnancy, others, none.")
 
-        # Normalize 'none' to None
         if special_need == 'none':
             special_need = None
 
@@ -793,46 +795,26 @@ def create_employee(db: Session, employee, tenant_id):
             employee.special_need_start_date = None
             employee.special_need_end_date = None
 
-
         # --------- Uniqueness checks ---------
         existing_emp_code = db.query(Employee).filter_by(employee_code=employee.employee_code).first()
         if existing_emp_code:
             logger.warning(f"Employee code {employee.employee_code} already exists.")
             raise HTTPException(status_code=409, detail="Employee code already exists.")
 
-        existing_mobile_user = (
-            db.query(User)
-            .filter_by(mobile_number=employee.mobile_number.strip(), tenant_id=tenant_id)
-            .first()
-        ) 
-        if existing_mobile_user:
+        existing_mobile = db.query(Employee).filter_by(mobile_number=employee.mobile_number.strip(), tenant_id=tenant_id).first()
+        if existing_mobile:
             logger.warning(f"Mobile number {employee.mobile_number} already exists.")
             raise HTTPException(status_code=409, detail="Mobile number already exists.")
 
-        # --------- Check or create user ---------
-        db_user = db.query(User).filter_by(email=employee.email.strip(), tenant_id=tenant_id).first()
-        if db_user:
-            logger.info(f"User with email {employee.email} already exists, user_id: {db_user.user_id}")
-            existing_employee = db.query(Employee).filter_by(user_id=db_user.user_id).first()
-            if existing_employee:
-                logger.warning(f"User {db_user.user_id} is already an employee.")
-                raise HTTPException(status_code=409, detail=f"User with email {db_user.email} is already an employee.")
-            user_id = db_user.user_id
-        else:
-
-            logger.info(f"Creating new user: {employee.username}, email: {employee.email}")
-            new_user = User(
-                username=employee.username.strip(),
-                email=employee.email.strip(),
-                mobile_number=employee.mobile_number.strip(),
-                hashed_password=employee.hashed_password,
-                tenant_id=tenant_id,
-                is_active=True
-            )
-            db.add(new_user)
-            db.commit()
-            db.refresh(new_user)
-            user_id = new_user.user_id
+        existing_email = db.query(Employee).filter_by(email=employee.email.strip(), tenant_id=tenant_id).first()
+        if existing_email:
+            logger.warning(f"Email {employee.email} already exists.")
+            raise HTTPException(status_code=409, detail="Email already exists.")
+        
+        # --------- Validate hashed_password ---------
+        if not employee.hashed_password or not employee.hashed_password.strip():
+            logger.warning("Missing hashed_password in payload")
+            raise HTTPException(status_code=422, detail="Hashed password is required.")
 
         # --------- Validate tenant and department ---------
         tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
@@ -858,12 +840,16 @@ def create_employee(db: Session, employee, tenant_id):
         # --------- Create employee ---------
         db_employee = Employee(
             employee_code=employee.employee_code.strip(),
-            user_id=user_id,
+            name=employee.name.strip(),
+            email=employee.email.strip(),
+            mobile_number=employee.mobile_number.strip(),
+            hashed_password=hash_password(employee.hashed_password.strip()),
             department_id=employee.department_id,
+            tenant_id=tenant_id,
             gender=employee.gender,
             alternate_mobile_number=employee.alternate_mobile_number,
             office=employee.office,
-            special_need=employee.special_need,
+            special_need=special_need,
             special_need_start_date=employee.special_need_start_date,
             special_need_end_date=employee.special_need_end_date,
             subscribe_via_email=employee.subscribe_via_email,
@@ -881,12 +867,12 @@ def create_employee(db: Session, employee, tenant_id):
         logger.info(f"Employee created successfully with ID: {db_employee.employee_code}")
         return {
             "employee_code": db_employee.employee_code,
+            "employee_id": db_employee.employee_id,
+            "name": db_employee.name,
+            "email": db_employee.email,
+            "mobile_number": db_employee.mobile_number,
             "department_id": db_employee.department_id,
-            "user_id": db_employee.user_id,
-            "username": db_employee.user.username,
-            "email": db_employee.user.email,
             "gender": db_employee.gender,
-            "mobile_number": db_employee.user.mobile_number,
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
@@ -928,10 +914,9 @@ def get_employee(db: Session, employee_code, tenant_id):
         
         employees = (
             db.query(Employee)
-            .join(Employee.user)
             .join(Employee.department)  # Ensure the department is joined
             .filter(Employee.employee_code == employee_code)
-            .filter(User.tenant_id == tenant_id)
+            .filter(Employee.tenant_id == tenant_id)
             .first()
         )
 
@@ -939,12 +924,12 @@ def get_employee(db: Session, employee_code, tenant_id):
             logger.warning(f"Employee {employee_code} not found for tenant {tenant_id}")
             raise HTTPException(status_code=404, detail="Employee not found.")
 
-        logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.user.username}, email: {employees.user.email}")
+        logger.info(f"Employee fetched: {employees.employee_code}, user: {employees.name}, email: {employees.email}")
 
         employee_data = {
             "employee_code": employees.employee_code,
             "gender": employees.gender,
-            "mobile_number": employees.user.mobile_number,
+            "mobile_number": employees.mobile_number,
             "alternate_mobile_number": employees.alternate_mobile_number,
             "office": employees.office,
             "special_need": employees.special_need,
@@ -958,9 +943,9 @@ def get_employee(db: Session, employee_code, tenant_id):
             "landmark": employees.landmark,
             "department_id": employees.department_id,
             "department_name": employees.department.department_name,  # ✅ added
-            "user_id": employees.user.user_id,
-            "username": employees.user.username,
-            "email": employees.user.email
+            "employee_id": employees.employee_id,
+            "name": employees.name,
+            "email": employees.email
         }
 
         logger.info(f"Returning employee data: {employee_data}")
@@ -985,9 +970,9 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
             raise HTTPException(status_code=404, detail="Department not found.")
 
         # Fetch employees
-        employees = db.query(Employee).join(User).filter(
+        employees = db.query(Employee).filter(
             Employee.department_id == department_id,
-            User.tenant_id == tenant_id
+            Employee.tenant_id == tenant_id
         ).all()
 
         if not employees:
@@ -999,12 +984,12 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
         employee_list = []
         for emp in employees:
             employee_list.append({
-                "user_id": emp.user.user_id,
+                "employee_id": emp.employee_id,
                 "employee_code": emp.employee_code,
-                "username": emp.user.username,
-                "email": emp.user.email,
+                "name": emp.name,
+                "email": emp.email,
                 "gender": emp.gender,
-                "mobile_number": emp.user.mobile_number,
+                "mobile_number": emp.mobile_number,
                 "alternate_mobile_number": emp.alternate_mobile_number,
                 "office": emp.office,
                 "special_need": emp.special_need,
@@ -1037,10 +1022,12 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
     try:
         logger.info(f"Updating employee with code: {employee_code} for tenant_id: {tenant_id}, payload: {employee_update.dict()}")
 
-        db_employee = db.query(Employee).join(User).filter(
+        db_employee = db.query(Employee).filter(
             Employee.employee_code == employee_code,
-            User.tenant_id == tenant_id
+            Employee.tenant_id == tenant_id
         ).first()
+
+        logger.info(f"Found employee: {db_employee}")
 
         if not db_employee:
             logger.warning(f"Employee with code {employee_code} not found for tenant {tenant_id}")
@@ -1133,11 +1120,12 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         return {
             "employee_code": db_employee.employee_code,
             "department_id": db_employee.department_id,
-            "user_id": db_employee.user_id,
-            "username": db_employee.user.username,
-            "email": db_employee.user.email,
+            "department_name": db_employee.department.department_name if db_employee.department else None,
+            "employee_id": db_employee.employee_id,
+            "name": db_employee.name,
+            "email": db_employee.email,
             "gender": db_employee.gender,
-            "mobile_number": db_employee.user.mobile_number,
+            "mobile_number": db_employee.mobile_number,
             "alternate_mobile_number": db_employee.alternate_mobile_number,
             "office": db_employee.office,
             "special_need": db_employee.special_need,
@@ -1176,9 +1164,9 @@ def delete_employee(db: Session, employee_code: str, tenant_id: int):
         logger.info(f"Delete request received for employee_code: {employee_code} in tenant_id: {tenant_id}")
 
         # Fetch employee with tenant check
-        db_employee = db.query(Employee).join(User).filter(
+        db_employee = db.query(Employee).filter(
             Employee.employee_code == employee_code,
-            User.tenant_id == tenant_id
+            Employee.tenant_id == tenant_id
         ).first()
 
         if not db_employee:
