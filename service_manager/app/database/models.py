@@ -55,6 +55,7 @@ class Tenant(Base, TimestampMixin):
     cutoff = relationship("Cutoff", back_populates="tenant", uselist=False)
     shifts = relationship("Shift", back_populates="tenant")
     vendors = relationship("Vendor", back_populates="tenant")
+    employees = relationship("Employee", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -71,8 +72,8 @@ class User(Base, TimestampMixin):
     tenants = relationship("Tenant", secondary=user_tenant, back_populates="users")
     groups = relationship("Group", secondary=group_user, back_populates="users")
     roles = relationship("Role", secondary=user_role, back_populates="users")
-    employee = relationship("Employee", back_populates="user", uselist=False)
-    # driver = relationship("Driver", back_populates="user", uselist=False)
+    
+
 class Department(Base, TimestampMixin):
     __tablename__ = 'departments'
 
@@ -89,11 +90,14 @@ class Department(Base, TimestampMixin):
 
 class Employee(Base, TimestampMixin):
     __tablename__ = 'employees'
-
-    employee_code = Column(String(50), unique=True, nullable=False ,primary_key=True)  # For 'sam1', etc.
-    user_id = Column(Integer, ForeignKey('users.user_id'), unique=True, nullable=False)
+    employee_id = Column(Integer, primary_key=True, index=True)
+    employee_code = Column(String(50), unique=True, nullable=False )  # For 'sam1', etc.
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False, unique=True)
+    mobile_number = Column(String(15), nullable=False, unique=True)
+    hashed_password = Column(String(255), nullable=False)  # Stores hashed password
     department_id = Column(Integer, ForeignKey('departments.department_id'), nullable=False)
-
+    tenant_id = Column(Integer, ForeignKey('tenants.tenant_id'), nullable=False)
     gender = Column(String(50))
     alternate_mobile_number = Column(String(15))
     office = Column(String(255))
@@ -107,8 +111,11 @@ class Employee(Base, TimestampMixin):
     longitude = Column(String(50))
     landmark = Column(String(255))
 
-    user = relationship("User", back_populates="employee", uselist=False)
+    tenant = relationship("Tenant", back_populates="employees")
     department = relationship("Department", backref="employees")
+    device = relationship("Device", back_populates="employee", uselist=False, cascade="all, delete-orphan")
+
+
 
 
 class Group(Base, TimestampMixin):
@@ -401,10 +408,10 @@ class Device(Base, TimestampMixin):
     __tablename__ = "devices"
 
     device_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, unique=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False, unique=True)
     device_uuid = Column(String(255), nullable=False)
     access_token = Column(String(512), nullable=True)
     device_name = Column(String(255), nullable=True)
     fcm_token = Column(String(512), nullable=True)  # Optional for push notifications
 
-    user = relationship("User", backref="device", uselist=False)
+    employee = relationship("Employee", back_populates="device", uselist=False)
