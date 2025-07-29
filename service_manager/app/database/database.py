@@ -135,13 +135,19 @@ def seed_data():
             # Create Employees (Assuming you want to make existing users employees)
             employees = [
                 Employee(
+                    name="Alice Johnson",
+                    email="alice.johnson@example.com",
+                    mobile_number="9123456789",
+                    hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
                     employee_code="acm1",
-                    user_id=users[0].user_id,
+                    tenant_id=tenants[0].tenant_id,
                     department_id=departments[0].department_id,
-                    gender="Male",
+                    gender="Female",
                     alternate_mobile_number="9123456789",
                     office="Head Office",
                     special_need=None,
+                    special_need_start_date=None,
+                    special_need_end_date=None,
                     subscribe_via_email=True,
                     subscribe_via_sms=False,
                     address="Acme HQ, Tech Park",
@@ -150,13 +156,19 @@ def seed_data():
                     landmark="Near Big Mall"
                 ),
                 Employee(
+                    name="Bob Smith",
+                    email="bob.smith@example.com",
+                    mobile_number="9123456788",
+                    hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
                     employee_code="sta1",
-                    user_id=users[1].user_id,
+                    tenant_id=tenants[0].tenant_id,
                     department_id=departments[1].department_id,
-                    gender="Female",
+                    gender="Male",
                     alternate_mobile_number=None,
                     office="Main Office",
                     special_need="Wheelchair Access",
+                    special_need_start_date=None,
+                    special_need_end_date=None,
                     subscribe_via_email=True,
                     subscribe_via_sms=True,
                     address="Startup Inc, Downtown",
@@ -165,13 +177,19 @@ def seed_data():
                     landmark="Opposite Metro Station"
                 ),
                 Employee(
+                    name="Charlie Medson",
+                    email="charlie.medson@example.com",
+                    mobile_number="9123456787",
+                    hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
                     employee_code="med1",
-                    user_id=users[2].user_id,
+                    tenant_id=tenants[0].tenant_id,
                     department_id=departments[2].department_id,
                     gender="Male",
                     alternate_mobile_number=None,
                     office="Med Solutions Office",
                     special_need=None,
+                    special_need_start_date=None,
+                    special_need_end_date=None,
                     subscribe_via_email=False,
                     subscribe_via_sms=True,
                     address="Med Solutions, Health Street",
@@ -482,21 +500,21 @@ def seed_data():
             # --- Seed Devices ---
             devices = [
                 Device(
-                    user_id=drivers[0].driver_id,
+                    employee_id=drivers[0].driver_id,
                     device_uuid="uuid-101-aaa",
                     device_name="John's iPhone",
                     access_token="token101",
                     fcm_token="fcm_token_101"
                 ),
                 Device(
-                    user_id=drivers[1].driver_id,
+                    employee_id=drivers[1].driver_id,
                     device_uuid="uuid-102-bbb",
                     device_name="Alice's Android",
                     access_token="token102",
                     fcm_token="fcm_token_102"
                 ),
                 Device(
-                    user_id=drivers[2].driver_id,
+                    employee_id=drivers[2].driver_id,
                     device_uuid="uuid-103-ccc",
                     device_name="Bob's Tablet",
                     access_token="token103",
