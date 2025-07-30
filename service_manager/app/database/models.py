@@ -46,6 +46,9 @@ class Tenant(Base, TimestampMixin):
     __tablename__ = 'tenants'
     tenant_id = Column(Integer, primary_key=True)
     tenant_name = Column(String(255), unique=True, nullable=False)
+    address = Column(String(500), nullable=True)
+    longitude = Column(String(50), nullable=True)
+    latitude = Column(String(50), nullable=True)
     tenant_metadata = Column(JSON, nullable=True)
     is_active = Column(Integer, default=1)
 
@@ -56,6 +59,7 @@ class Tenant(Base, TimestampMixin):
     shifts = relationship("Shift", back_populates="tenant")
     vendors = relationship("Vendor", back_populates="tenant")
     employees = relationship("Employee", back_populates="tenant")
+    bookings = relationship("Booking", back_populates="tenant")
 
 
 class User(Base, TimestampMixin):
@@ -83,6 +87,8 @@ class Department(Base, TimestampMixin):
     description = Column(String(500))
 
     tenant = relationship("Tenant", backref="departments")
+    employees = relationship("Employee", back_populates="department")
+    bookings = relationship("Booking", back_populates="department")
 
     __table_args__ = (
         UniqueConstraint('department_name', 'tenant_id', name='uix_department_tenant'),
@@ -112,8 +118,9 @@ class Employee(Base, TimestampMixin):
     landmark = Column(String(255))
 
     tenant = relationship("Tenant", back_populates="employees")
-    department = relationship("Department", backref="employees")
+    department = relationship("Department", back_populates="employees")
     device = relationship("Device", back_populates="employee", uselist=False, cascade="all, delete-orphan")
+    bookings = relationship("Booking", back_populates="employee")
 
 
 
@@ -250,6 +257,7 @@ class Shift(Base):
     
     # Relationship to Tenant
     tenant = relationship("Tenant", back_populates="shifts")
+    bookings = relationship("Booking", back_populates="shift")
 
 class Vendor(Base):
     __tablename__ = "vendors"
@@ -415,3 +423,29 @@ class Device(Base, TimestampMixin):
     fcm_token = Column(String(512), nullable=True)  # Optional for push notifications
 
     employee = relationship("Employee", back_populates="device", uselist=False)
+
+
+class Booking(Base, TimestampMixin):
+    __tablename__ = "bookings"
+
+    booking_id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
+    employee_code = Column(String(50), nullable=False)  # e.g., 'sam1', etc.
+    tenant_id = Column(Integer, ForeignKey("tenants.tenant_id"), nullable=False)
+    shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=False)
+    booking_date = Column(Date, nullable=False)  # Date of the booking
+    pickup_location = Column(String(255), nullable=False)
+    pickup_location_latitude = Column(String(50), nullable=False)
+    pickup_location_longitude = Column(String(50), nullable=False)
+    drop_location = Column(String(255), nullable=False)
+    drop_location_latitude = Column(String(50), nullable=False)
+    drop_location_longitude = Column(String(50), nullable=False)
+    status = Column(String(50), default="Pending")  # e.g., Pending, Confirmed, Completed, Cancelled
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    employee = relationship("Employee", back_populates="bookings")
+    tenant = relationship("Tenant", back_populates="bookings")
+    shift = relationship("Shift", back_populates="bookings")
+    department = relationship("Department", back_populates="bookings")
