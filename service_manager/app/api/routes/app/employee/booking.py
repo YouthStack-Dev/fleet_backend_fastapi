@@ -6,7 +6,7 @@ from app.database.database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from app.database.models import Booking, Employee, Tenant # Add additional imports
+from app.database.models import Booking, Cutoff, Employee, Tenant # Add additional imports
 from app.api.schemas.schemas import ShiftResponse   
 from app.api.routes.app.employee.auth import PermissionChecker
 from app.database.models import Shift
@@ -221,6 +221,41 @@ def get_all_bookings(
     except Exception as exc:
         logger.exception("Error while fetching bookings.")
         raise HTTPException(status_code=500, detail="An error occurred while fetching bookings.")
+
+@router.post("/employee/cancel-booking/{booking_id}/")
+def cancel_booking(
+    booking_id: int,
+    token_data: dict = Depends(PermissionChecker([])),
+    db: Session = Depends(get_db),
+):
+    try:
+        # Fetch the booking
+        booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+
+        # Fetch cutoff time for cancellation
+        tenant_id = token_data.get("tenant_id")
+        cutoff_time = db.query(Cutoff.cancellation_cutoff).filter(Cutoff.tenant_id == tenant_id).scalar()
+
+        # Check if the booking can be canceled based on the cutoff
+        current_time = datetime.datetime.now().time()
+        if booking.booking_date == datetime.datetime.now().date() and current_time >= datetime.time(cutoff_time):
+            raise HTTPException(status_code=400, detail="Booking cannot be canceled after cutoff time.")
+
+        # Cancel the booking
+        booking.status = "Cancelled"
+        db.commit()
+
+        return {"detail": "Booking canceled successfully"}
+
+    except HTTPException as e:
+        logger.error(f"HTTPException: {str(e.detail)}")
+        raise e
+
+    except Exception as exc:
+        logger.exception("Error while canceling booking")
+        raise HTTPException(status_code=500, detail="An error occurred while canceling the booking.")
 
 @router.post("/employee/common-shifts/")
 def get_common_shifts_for_dates(
