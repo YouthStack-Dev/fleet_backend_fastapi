@@ -10,7 +10,7 @@ import jwt
 import traceback
 from app.database.database import get_db
 from app.crud import crud
-from app.api.schemas.schemas import EmployeeLoginResponse
+from app.api.schemas.schemas import EmployeeLoginResponse, EmployeeResponse
 from common_utils.auth.utils import hash_password , verify_password
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/employees/auth", tags=["employee Authentication"])
@@ -22,17 +22,19 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 def authenticate_user(db: Session, email: str, password: str):
-    user = crud.get_user_by_email(db, email)
-    if not user:
-        print(f"User with email {email} not found")
+    employee = get_employee_by_email(db, email)
+    if not employee:
+        print(f"Employee with email {email} not found")
         return None
-    if not verify_password(hash_password(password), user.hashed_password):
+    if not verify_password(hash_password(password), employee.hashed_password):
         print(f"Incorrect password for email {email}")
         return None
-    return user
-
+    return employee
+def get_employee_by_email(db: Session, email: str) -> Optional[EmployeeResponse]:
+    return db.query(Employee).filter(Employee.email == email).first()
+    
 def create_access_token(
-    user_id: str,
+    employee_id: str,
     tenant_id: str,
     department_id: Optional[str] = None,
     department_name: Optional[str] = None,
@@ -42,7 +44,7 @@ def create_access_token(
 ) -> str:
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     payload = {
-        "user_id": user_id,
+        "employee_id": employee_id,
         "tenant_id": tenant_id,
         "department_id": department_id,
         "department_name": department_name,
@@ -63,11 +65,10 @@ class PermissionChecker:
     def __call__(self, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Dict:
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            user_id = payload.get("user_id")
+            employee_id = payload.get("employee_id")
             tenant_id = payload.get("tenant_id")
-            role = payload.get("role")
-
-            if user_id is None or tenant_id is None:
+            
+            if employee_id is None or tenant_id is None:
                 raise HTTPException(status_code=401, detail="Invalid token payload")
 
             # Optional: Add permission validation logic here
@@ -75,14 +76,14 @@ class PermissionChecker:
                 # Validate user permissions from DB (if applicable)
                 pass
 
-            return {"user_id": user_id, "tenant_id": tenant_id, "role": role}
+            return {"employee_id": employee_id, "tenant_id": tenant_id}
 
         except JWTError as e:
             logging.error(f"JWT decode failed: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid token")
 
 # ----------------------- Login Endpoint -----------------------
-from app.database.models import Device  # or wherever your Device model is
+from app.database.models import Device, Employee  # or wherever your Device model is
 from sqlalchemy.exc import SQLAlchemyError
 
 @router.post("/employee/login", response_model=EmployeeLoginResponse)
@@ -95,25 +96,25 @@ def employee_login(
     fcm_token: Optional[str] = Body(None),
     force_logout: Optional[bool] = Body(False),
 ):
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
+    employee = authenticate_user(db, form_data.username, form_data.password)
+    if not employee:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not user.employee:
+    if not employee:
         raise HTTPException(status_code=403, detail="Only employees can login")
 
     try:
         # 🔍 Check existing device for this user
-        existing_device = db.query(Device).filter(Device.user_id == user.user_id).first()
+        existing_device = db.query(Device).filter(Device.employee_id == employee.employee_id).first()
 
         # Generate access token
         access_token = create_access_token(
-            user_id=user.user_id,
-            tenant_id=user.tenant_id,
-            department_id=user.employee.department_id if user.employee else None,
-            department_name=user.employee.department.department_name if user.employee and user.employee.department else None,
-            employee_code=user.employee.employee_code if user.employee else None,
-            username=user.username if user else None
+            employee_id=employee.employee_id,
+            tenant_id=employee.tenant_id,
+            department_id=employee.department_id,
+            department_name=employee.department.department_name,
+            employee_code=employee.employee_code,
+            username=employee.name
 
         )
 
@@ -133,7 +134,7 @@ def employee_login(
         else:
             # No device exists for user — insert new
             new_device = Device(
-                user_id=user.user_id,
+                employee_id=employee.employee_id,
                 device_uuid=device_uuid,
                 device_name=device_name,
                 fcm_token=fcm_token,
@@ -142,15 +143,15 @@ def employee_login(
             db.add(new_device)
             db.commit()
 
-        employee = user.employee
+        employee = db.query(Employee).filter(Employee.employee_id == employee.employee_id).first()  # Fetch employee
         department = employee.department if employee else None
 
         return EmployeeLoginResponse(
             access_token=access_token,
             token_type="bearer",
-            user_id=user.user_id,
+            employee_id=employee.employee_id,
             employee_code=employee.employee_code if employee else None,
-            username=user.username if user else None,
+            username=employee.name if employee else None,
             department_id=department.department_id if department else None,
             department_name=department.department_name if department else None
         )
