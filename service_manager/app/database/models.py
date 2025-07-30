@@ -434,6 +434,7 @@ class Booking(Base, TimestampMixin):
     tenant_id = Column(Integer, ForeignKey("tenants.tenant_id"), nullable=False)
     shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=False)
     department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=False)
+    booking_date = Column(Date, nullable=False)  # Date of the booking
     pickup_location = Column(String(255), nullable=False)
     pickup_location_latitude = Column(String(50), nullable=False)
     pickup_location_longitude = Column(String(50), nullable=False)
