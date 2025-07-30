@@ -52,7 +52,7 @@ def seed_data():
 
         # Create Tenants
         tenants = [
-            Tenant(tenant_name="neru network", tenant_metadata={"industry": "Technology", "size": "Enterprise"}),
+            Tenant(tenant_name="neru network", address="123 Main St, Anytown, USA", longitude="123.456", latitude="78.910", tenant_metadata={"industry": "Technology", "size": "Enterprise"}),
         ]
         
         for tenant in tenants:
