@@ -654,3 +654,20 @@ class ShiftResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class BookingOut(BaseModel):
+    booking_id: int
+    employee_id: int
+    employee_code: str
+    employee_name: str
+    pickup_location: str
+    pickup_location_latitude: Optional[float]
+    pickup_location_longitude: Optional[float]
+    drop_location: str
+    drop_location_latitude: Optional[float]
+    drop_location_longitude: Optional[float]
+    status: str
+
+class ShiftBookingResponse(BaseModel):
+    shift_id: int
+    bookings: List[BookingOut]
