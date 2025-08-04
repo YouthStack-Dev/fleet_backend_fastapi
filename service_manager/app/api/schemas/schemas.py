@@ -671,3 +671,27 @@ class BookingOut(BaseModel):
 class ShiftBookingResponse(BaseModel):
     shift_id: int
     bookings: List[BookingOut]
+
+
+class PickupPoint(BaseModel):
+    booking_id: int
+    pickup_lat: float
+    pickup_lng: float
+
+class TempRoute(BaseModel):
+    temp_route_id: int
+    booking_ids: List[int]
+    pickup_order: List[PickupPoint]
+    estimated_time: str
+    estimated_distance: str
+    drop_lat: float
+    drop_lng: float
+    drop_address: Optional[str] = None
+
+
+class GenerateRouteResponse(BaseModel):
+    shift_id: int
+    routes: List[TempRoute]
+
+class GenerateRouteRequest(BaseModel):
+    shift_id: int
