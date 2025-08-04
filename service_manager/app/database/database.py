@@ -595,23 +595,23 @@ def seed_data():
                     created_at=datetime.datetime.now(),
                     updated_at=datetime.datetime.now(),
                 ),
-                Booking(
-                    employee_id=SEED_employees[1].employee_id,
-                    employee_code=SEED_employees[1].employee_code,
-                    tenant_id=tenant.tenant_id,
-                    shift_id=SEED_shifts[1].id,
-                    department_id=SEED_employees[1].department_id,
-                    booking_date=datetime.date(2025, 8, 2),
-                    pickup_location="Sample Pickup Location",
-                    pickup_location_latitude=SEED_employees[1].latitude,
-                    pickup_location_longitude=SEED_employees[1].longitude,
-                    drop_location="Sample Drop Location",
-                    drop_location_latitude="13.0632540",
-                    drop_location_longitude="77.4950427",
-                    status="Confirmed",
-                    created_at=datetime.datetime.now(),
-                    updated_at=datetime.datetime.now(),
-                )
+                # Booking(
+                #     employee_id=SEED_employees[1].employee_id,
+                #     employee_code=SEED_employees[1].employee_code,
+                #     tenant_id=tenant.tenant_id,
+                #     shift_id=SEED_shifts[1].id,
+                #     department_id=SEED_employees[1].department_id,
+                #     booking_date=datetime.date(2025, 8, 2),
+                #     pickup_location="Sample Pickup Location",
+                #     pickup_location_latitude=SEED_employees[1].latitude,
+                #     pickup_location_longitude=SEED_employees[1].longitude,
+                #     drop_location="Sample Drop Location",
+                #     drop_location_latitude="13.0632540",
+                #     drop_location_longitude="77.4950427",
+                #     status="Confirmed",
+                #     created_at=datetime.datetime.now(),
+                #     updated_at=datetime.datetime.now(),
+                # )
             ]
             session.add_all(sample_bookings)
             session.commit()
