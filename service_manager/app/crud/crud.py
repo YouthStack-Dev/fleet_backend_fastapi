@@ -652,9 +652,9 @@ def get_departments(db, tenant_id: int, skip: int = 0, limit: int = 100):
 
         department_list = []
         for department in departments:
-            employee_count = db.query(Employee).join(User).filter(
+            employee_count = db.query(Employee).filter(
                 Employee.department_id == department.department_id,
-                User.tenant_id == tenant_id
+                Employee.tenant_id == tenant_id
             ).count()
 
             department_list.append({
