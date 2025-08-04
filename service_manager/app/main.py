@@ -17,6 +17,7 @@ from app.api.routes.driver import router as driver_router
 from app.api.routes.vehicle import router as vehicle_router
 from app.api.routes.app.employee.auth import router as app_auth_router
 from app.api.routes.app.employee.booking import router as employee_booking_router
+from app.api.routes.booking import router as booking_router
 from contextlib import asynccontextmanager
 from app.database.database import init_db, seed_data
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +71,7 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestLoggerMiddleware)
 app.include_router(app_auth_router, prefix="/api")
+app.include_router(booking_router, prefix="/api")
 app.include_router(employee_booking_router, prefix="/api")
 app.include_router(vehicle_router, prefix="/api/vendors", tags=["vehicles"])
 app.include_router(driver_router, prefix="/api/vendors", tags=["drivers"])

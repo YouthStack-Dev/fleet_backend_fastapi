@@ -654,3 +654,44 @@ class ShiftResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class BookingOut(BaseModel):
+    booking_id: int
+    employee_id: int
+    employee_code: str
+    employee_name: str
+    pickup_location: str
+    pickup_location_latitude: Optional[float]
+    pickup_location_longitude: Optional[float]
+    drop_location: str
+    drop_location_latitude: Optional[float]
+    drop_location_longitude: Optional[float]
+    status: str
+
+class ShiftBookingResponse(BaseModel):
+    shift_id: int
+    bookings: List[BookingOut]
+
+
+class PickupPoint(BaseModel):
+    booking_id: int
+    pickup_lat: float
+    pickup_lng: float
+
+class TempRoute(BaseModel):
+    temp_route_id: int
+    booking_ids: List[int]
+    pickup_order: List[PickupPoint]
+    estimated_time: str
+    estimated_distance: str
+    drop_lat: float
+    drop_lng: float
+    drop_address: Optional[str] = None
+
+
+class GenerateRouteResponse(BaseModel):
+    shift_id: int
+    routes: List[TempRoute]
+
+class GenerateRouteRequest(BaseModel):
+    shift_id: int
