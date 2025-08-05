@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # It will load .env file values into os.environ
+
 from typing import Union
 from fastapi import FastAPI
 from app.api.routes.tenants import router as tenant_router
