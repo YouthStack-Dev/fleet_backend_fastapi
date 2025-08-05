@@ -55,7 +55,7 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         script: |
-          echo "${{ secrets.FIREBASE_KEY_BASE64 }}" | base64 -d > ~/firebase_key.json
+          echo "${{ secrets.FIREBASE_KEY_JSON }}" | base64 -d > ~/firebase_key.json
           cat <<EOF > ~/service.env
           FIREBASE_KEY_PATH=/app/secrets/firebase_key.json
           EOF
