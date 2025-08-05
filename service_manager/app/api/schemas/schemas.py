@@ -110,6 +110,7 @@ class EmployeeCreate(EmployeeBase):
 class EmployeeUpdate(BaseModel):
     # employee_code: Optional[str]  # Optional for update
     gender: Optional[str] = None
+    name: Optional[str] = None
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
