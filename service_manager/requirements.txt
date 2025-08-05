@@ -8,6 +8,7 @@ PyJWT
 passlib[bcrypt]
 pydantic[email]
 requests
+firebase-admin
 
 common_utils @ git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git@main#subdirectory=common_utils_package
 # pip install git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git#subdirectory=common_utils

@@ -863,6 +863,19 @@ def create_employee(db: Session, employee, tenant_id):
         db.add(db_employee)
         db.commit()
         db.refresh(db_employee)
+        from app.firebase.employee_push import push_employee_to_firebase
+
+        # Push to Firebase after DB commit
+        try:
+            push_employee_to_firebase(
+                tenant_id=tenant_id,
+                department_id=employee.department_id,
+                employee_code=db_employee.employee_code,
+                employee_id=db_employee.employee_id,
+                name=db_employee.name
+            )
+        except Exception as e:
+            logger.error(f"Failed to push employee to Firebase: {str(e)}")
 
         logger.info(f"Employee created successfully with ID: {db_employee.employee_code}")
         return {
@@ -1117,6 +1130,20 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         db.refresh(db_employee)
 
         logger.info(f"Employee {employee_code} updated successfully for tenant {tenant_id}")
+        from app.firebase.employee_push import push_employee_to_firebase
+
+        # Push updated data to Firebase
+        try:
+            push_employee_to_firebase(
+                tenant_id=tenant_id,
+                department_id=db_employee.department_id,
+                employee_code=db_employee.employee_code,
+                employee_id=db_employee.employee_id,
+                name=db_employee.name
+            )
+        except Exception as e:
+            logger.error(f"Failed to update employee in Firebase: {str(e)}")
+
         return {
             "employee_code": db_employee.employee_code,
             "department_id": db_employee.department_id,
