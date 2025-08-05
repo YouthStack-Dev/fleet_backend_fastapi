@@ -5,3 +5,6 @@ env/*
 venv/*
 .venv/*
 .env/*
+
+# Ignore Firebase secrets
+# service_manager/app/firebase/firebase_key.json
