@@ -44,7 +44,7 @@ jobs:
       with:
         host: ${{ secrets.VPS_IP }}
         username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_PASSWORD }}
+        key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         source: "docker-compose.prod.yml"
         target: "~/"
 
@@ -53,7 +53,7 @@ jobs:
       with:
         host: ${{ secrets.VPS_IP }}
         username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_PASSWORD }}
+        key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         script: |
           echo "${{ secrets.FIREBASE_KEY_BASE64 }}" | base64 -d > ~/firebase_key.json
           cat <<EOF > ~/service.env
