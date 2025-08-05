@@ -1101,12 +1101,14 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
 
         if employee_update.mobile_number is not None:
             db_employee.mobile_number = employee_update.mobile_number.strip()
+        if employee_update.name is not None:
+            db_employee.name = employee_update.name.strip()
 
         if employee_update.alternate_mobile_number is not None:
-            db_employee.alternate_mobile_number = employee_update.alternate_mobile_number
+            db_employee.alternate_mobile_number = employee_update.alternate_mobile_number.strip()
 
         if employee_update.office is not None:
-            db_employee.office = employee_update.office
+            db_employee.office = employee_update.office.strip()
 
         if employee_update.subscribe_via_email is not None:
             db_employee.subscribe_via_email = employee_update.subscribe_via_email

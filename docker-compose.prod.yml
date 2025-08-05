@@ -17,10 +17,22 @@ services:
   service_manager:
     image: dheerajkumarp/fleet_service_manager:latest
     container_name: service_manager
+
+    # ✅ Load env vars from the service.env file
+    env_file:
+      - ./service.env
+
+    # ✅ Mount the firebase key JSON file inside the container
+    volumes:
+      - ./firebase_key.json:/app/secrets/firebase_key.json
+
+    # ✅ Internal container-to-container DB connection
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
+
     depends_on:
       - db_servicemgr
+
     ports:
       - "8100:8100"
     restart: always
