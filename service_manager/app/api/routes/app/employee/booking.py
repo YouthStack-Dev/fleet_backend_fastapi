@@ -293,10 +293,21 @@ def get_common_shifts_for_dates(
         if len(dates) != len(set(dates)):
             logger.warning(f"Duplicate dates provided: {dates}")
             raise HTTPException(status_code=400, detail="Dates contain duplicates.")
+        # Check for empty input
+        if not dates:
+            logger.warning("Empty date list provided.")
+            return {
+                "your_dates": [],
+                "count": 0,
+                "days_matched": [],
+                "shifts": [],
+                "message": "Please provide at least one date to find matching shifts."
+            }
 
         today = datetime.date.today()
         days = set()
 
+        # Parse input dates and get their weekdays
         for date_str in dates:
             try:
                 date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -308,7 +319,11 @@ def get_common_shifts_for_dates(
                 logger.warning(f"Past date provided: {date_str}")
                 raise HTTPException(status_code=400, detail=f"Date {date_str} is in the past.")
 
-            days.add(calendar.day_name[date_obj.weekday()].lower())
+            weekday = calendar.day_name[date_obj.weekday()].lower()
+            days.add(weekday)
+            logger.info(f"Parsed date: {date_str} → weekday: {weekday}")
+
+        logger.info(f"Final weekday set from input dates: {days}")
 
         # Query all shifts for tenant with given log_type
         shifts = (
@@ -320,20 +335,37 @@ def get_common_shifts_for_dates(
             .all()
         )
 
+        logger.info(f"Found {len(shifts)} shifts for tenant_id={tenant_id}, log_type={log_type}")
+
         # Match shifts based on days
         matched_shifts = []
         for shift in shifts:
             if not shift.day:
+                logger.warning(f"Shift ID {shift.id} has no day defined. Skipping.")
                 continue
-            shift_days = shift.day.strip("{}").lower().replace(" ", "").split(",")
-            if any(day in shift_days for day in days):
-                matched_shifts.append(shift)
 
+            # Clean and parse shift day string
+            cleaned_day_str = shift.day.strip("{}").lower().replace(" ", "")
+            shift_days = set(cleaned_day_str.split(","))
+            logger.debug(f"Shift ID {shift.id} has days: {shift_days}")
+
+
+            # NEW: shift must cover ALL requested days
+            if days <= shift_days:
+                logger.info(f"Shift ID {shift.id} fully covers all input days: {days}")
+                matched_shifts.append(shift)
+            else:
+                logger.info(f"Shift ID {shift.id} skipped. Does not cover all input days: required={days}, shift_has={shift_days}")
+
+        # Build base response
         response = {
             "your_dates": dates,
             "count": len(matched_shifts),
             "days_matched": list(days),
-            "shifts": [
+        }
+
+        if matched_shifts:
+            response["shifts"] = [
                 {
                     "shift_id": shift.id,
                     "day": shift.day,
@@ -344,10 +376,13 @@ def get_common_shifts_for_dates(
                 }
                 for shift in matched_shifts
             ]
-        }
+        else:
+            response["message"] = "No shifts matched with the selected dates."
+
 
         logger.info(f"Returning {len(matched_shifts)} matched shifts for tenant_id={tenant_id}")
         return response
+
     except HTTPException as e:
         logger.error(f"HTTPException: {str(e.detail)}")
         raise e
