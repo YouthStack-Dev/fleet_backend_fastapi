@@ -538,7 +538,7 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
-class VendorOut(BaseModel):
+class DriverVendorOut(BaseModel):
     vendor_id: int
     vendor_name: Optional[str] = None
 
@@ -549,7 +549,7 @@ class DriverOut(BaseModel):
     driver_id: int
     driver_code: str  # Unique code for the driver
     # vendor_id: int
-    vendor: Optional[VendorOut] = None  # <-- Nested object for name
+    vendor: Optional[DriverVendorOut] = None  # <-- Nested object for name
 
     name: str
     email: EmailStr
