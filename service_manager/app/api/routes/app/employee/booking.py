@@ -377,6 +377,7 @@ def get_common_shifts_for_dates(
                 for shift in matched_shifts
             ]
         else:
+            response["shifts"] = []
             response["message"] = "No shifts matched with the selected dates."
 
 
