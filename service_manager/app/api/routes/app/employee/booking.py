@@ -86,9 +86,17 @@ def create_booking(
             if booking_date <= datetime.datetime.now().date() and current_time >= datetime.time(cutoff_time):
                 raise HTTPException(status_code=400, detail=f"Unable to book for {booking_date}, cutoff time exceeded.")
                 # Check if booking dates match the shift's days
-        valid_days = [day.strip().lower() for day in shift.day.split(",")]
+        logger.info(f"Raw shift.day value from DB: {shift.day}")
+        logger.info(f"Raw shift.day value from DB: {shift.day}")
+        cleaned_day_str = shift.day.strip("{}")
+        valid_days = [day.strip().lower() for day in cleaned_day_str.split(",")]
+        logger.info(f"Computed valid_days: {valid_days}")
+
         for booking_date in booking_dates:
             weekday = booking_date.strftime('%A').lower()
+            logger.info(f"Computed valid_days: {valid_days}")
+            logger.info(f"Booking date: {booking_date}, weekday: {weekday}")
+
             if weekday not in valid_days:
                 raise HTTPException(status_code=400, detail=f"Booking date {booking_date} does not match shift days {shift.day}.")
 
