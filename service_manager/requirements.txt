@@ -8,7 +8,7 @@ PyJWT
 passlib[bcrypt]
 pydantic[email]
 requests
-firebase-admin
+firebase-admin>=6.5.0
 python-dotenv
 
 common_utils @ git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git@main#subdirectory=common_utils_package

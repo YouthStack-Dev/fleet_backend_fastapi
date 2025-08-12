@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 from typing import List, Optional, Dict
 from datetime import date, datetime ,time
 from typing_extensions import Literal
-
+from enum import Enum
 class TenantCreate(BaseModel):
     tenant_name: str
     tenant_metadata: Optional[Dict] = None
@@ -85,12 +85,17 @@ class DepartmentOut(DepartmentBase):
     class Config:
         from_attributes = True
 
+class SpecialNeedEnum(str, Enum):
+    pregnancy = "pregnancy"
+    other = "other"
+    none = "none"
+
 class EmployeeBase(BaseModel):
     employee_code: str  # Added to Base as it's required for both create & update
     gender: str
     alternate_mobile_number: Optional[str]
     office: str
-    special_need: Optional[str]
+    special_need: Optional[SpecialNeedEnum]
     special_need_start_date: Optional[date] = None
     special_need_end_date: Optional[date] = None
     subscribe_via_email: bool
@@ -114,7 +119,7 @@ class EmployeeUpdate(BaseModel):
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
-    special_need: Optional[str] = None
+    special_need: Optional[SpecialNeedEnum] = None
     special_need_start_date: Optional[date] = None
     special_need_end_date: Optional[date] = None
     subscribe_via_email: Optional[bool] = None
@@ -155,6 +160,7 @@ class EmployeeResponse(BaseModel):
     longitude: Optional[str] = None
     landmark: Optional[str] = None
     department_name: Optional[str] = None
+    department_id: Optional[int] = None
 class EmployeesByDepartmentResponse(BaseModel):
     department_id: int
     department_name: str
@@ -289,7 +295,7 @@ class CutoffRead(CutoffBase):
         from_attributes = True
 
 # app/api/schemas/shift.py
-from enum import Enum
+
 class LogType(str, Enum):
     IN = "in"
     OUT = "out"
