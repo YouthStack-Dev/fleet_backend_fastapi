@@ -4,7 +4,9 @@ load_dotenv()  # It will load .env file values into os.environ
 
 import os
 import firebase_admin
-from firebase_admin import credentials, initialize_app, db
+from firebase_admin import credentials, initialize_app
+from firebase_admin import db
+
 
 firebase_key_path = os.getenv("FIREBASE_KEY_PATH", "firebase_key.json")
 
