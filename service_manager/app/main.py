@@ -78,9 +78,12 @@ UPLOAD_DIR = "/app/app/uploaded_files"
 
 # Mount only if the folder exists
 if os.path.exists(UPLOAD_DIR) and os.path.isdir(UPLOAD_DIR):
+    logger.info(f"Mounting static files from {UPLOAD_DIR}")
     app.mount("/uploaded_files", StaticFiles(directory=UPLOAD_DIR), name="uploaded_files")
+    logger.info(f"Mounted static files from {UPLOAD_DIR}")
 else:
-    print(f"[WARNING] Upload directory not found: {UPLOAD_DIR}")
+    logger.warning(f"Upload directory {UPLOAD_DIR} does not exist or is not a directory. Static files will not be served.")
+
 app.add_middleware(RequestLoggerMiddleware)
 app.include_router(app_auth_router, prefix="/api")
 app.include_router(booking_router, prefix="/api")
