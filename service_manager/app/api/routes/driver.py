@@ -57,12 +57,14 @@ def get_all_drivers_by_tenant(
         raise HTTPException(status_code=500, detail="Unexpected server error.")
 
 async def file_size_validator(
-    file: Optional[UploadFile],
+    file: UploadFile,
     allowed_types: list[str],
-    max_size_mb: int = 5
-) -> Optional[UploadFile]:
+    max_size_mb: int = 5,
+    required: bool = True
+) -> UploadFile:
     if not file or not file.filename:
-        logger.info("No file uploaded, skipping validation.")
+        if required:
+            raise HTTPException(status_code=422, detail=f"'{file.filename}' file is required.")
         return None
 
     logger.info(f"Validating file: {file.filename}")
@@ -75,8 +77,6 @@ async def file_size_validator(
         )
 
     contents = await file.read()
-    file.file = io.BytesIO(contents)  # reset file pointer
-
     size_mb = len(contents) / (1024 * 1024)
     if size_mb > max_size_mb:
         raise HTTPException(
@@ -84,7 +84,16 @@ async def file_size_validator(
             detail=f"{file.filename} is too large. Max allowed size is {max_size_mb}MB."
         )
 
+    # Reset file pointer so it can be read again later
+    file.file = io.BytesIO(contents)
     return file
+
+from pathlib import Path
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent  # adjust if needed
+UPLOADS_DIR = ROOT_DIR / "uploaded_files"
+
 def save_file(
     file: Optional[UploadFile],
     vendor_id: int,
@@ -94,27 +103,27 @@ def save_file(
     if file and file.filename:
         # Get file extension from original filename
         _, ext = os.path.splitext(file.filename)
-        ext = ext.lower().strip()  # normalize extension
+        ext = ext.lower().strip()
 
         # Construct safe filename: {driver_code}_{doc_type}.{ext}
         safe_filename = f"{driver_code.strip()}_{doc_type.strip()}{ext}"
 
-        # New path: uploaded_files/vendors/{vendor_id}/drivers/{driver_code}/{doc_type}/{filename}
-        folder_path = os.path.join("uploaded_files", "vendors", str(vendor_id), "drivers", driver_code.strip(), doc_type)
-        os.makedirs(folder_path, exist_ok=True)
+        folder_path = UPLOADS_DIR / "vendors" / str(vendor_id) / "drivers" / driver_code.strip() / doc_type
+        folder_path.mkdir(parents=True, exist_ok=True)
 
-        file_path = os.path.join(folder_path, safe_filename)
+        file_path = folder_path / safe_filename
 
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        rel_path = os.path.relpath(file_path, start="uploaded_files")
-        abs_path = os.path.abspath(file_path)
+        logger.info(f"{doc_type.upper()} document saved at: {file_path.resolve()}")
+        # return str(file_path.resolve())
+        relative_path = file_path.relative_to(ROOT_DIR)
+        logger.info(f"Relative path for {doc_type}: {relative_path}")
+        return str(relative_path).replace("\\", "/")  # ensure forward slashes
 
-        logger.info(f"{doc_type.upper()} document saved at: {abs_path}")
-        return rel_path
-    else:
-        logger.debug(f"No file provided for {doc_type}")
+
+    logger.debug(f"No file provided for {doc_type}")
     return None
 
 @router.post("/{vendor_id}/drivers/", response_model=DriverOut, status_code=status.HTTP_201_CREATED)
@@ -127,55 +136,77 @@ async def create_driver(
     hashed_password: str = Form(...),
     mobile_number: str = Form(...),
 
-    city: Optional[str] = Form(...),
-    date_of_birth: Optional[date] = Form(...),
-    gender: Optional[str] = Form(...),
+    city: str = Form(...),
+    date_of_birth: str = Form(...),
+    gender: str = Form(...),
 
-    alternate_mobile_number: Optional[str] = Form(...),
-    permanent_address: Optional[str] = Form(...),
-    current_address: Optional[str] = Form(...),
+    alternate_mobile_number: str = Form(...),
+    permanent_address: str = Form(...),
+    current_address: str = Form(...),
 
-    bgv_status: Optional[str] = Form(...),
-    bgv_date: Optional[date] = Form(...),
+    bgv_status: str = Form(...),
+    bgv_date: str = Form(...),
 
-    police_verification_status: Optional[str] = Form(...),
-    police_verification_date: Optional[date] = Form(...),
+    police_verification_status: str = Form(...),
+    police_verification_date: str = Form(...),
 
-    medical_verification_status: Optional[str] = Form(...),
-    medical_verification_date: Optional[date] = Form(...),
+    medical_verification_status: str = Form(...),
+    medical_verification_date: str = Form(...),
 
-    training_verification_status: Optional[str] = Form(...),
-    training_verification_date: Optional[date] = Form(...),
+    training_verification_status: str = Form(...),
+    training_verification_date: str = Form(...),
 
-    eye_test_verification_status: Optional[str] = Form(...),
-    eye_test_verification_date: Optional[date] = Form(...),
+    eye_test_verification_status: str = Form(...),
+    eye_test_verification_date: str = Form(...),
 
-    license_number: Optional[str] = Form(...),
-    license_expiry_date: Optional[date] = Form(...),
+    license_number: str = Form(...),
+    license_expiry_date: str = Form(...),
 
-    induction_date: Optional[date] = Form(...),
+    induction_date: str = Form(...),
 
-    badge_number: Optional[str] = Form(...),
-    badge_expiry_date: Optional[date] = Form(...),
+    badge_number: str = Form(...),
+    badge_expiry_date: str = Form(...),
 
-    alternate_govt_id: Optional[str] = Form(...),
-    alternate_govt_id_doc_type: Optional[str] = Form(...),
+    alternate_govt_id: str = Form(...),
+    alternate_govt_id_doc_type: str = Form(...),
 
-    bgv_doc_file: Optional[UploadFile] = None,
-    police_verification_doc_file: Optional[UploadFile] = None,
-    medical_verification_doc_file: Optional[UploadFile] = None,
-    training_verification_doc_file: Optional[UploadFile] = None,
-    eye_test_verification_doc_file: Optional[UploadFile] = None,
-    license_doc_file: Optional[UploadFile] = None,
-    induction_doc_file: Optional[UploadFile] = None,
-    badge_doc_file: Optional[UploadFile] = None,
-    alternate_govt_id_doc_file: Optional[UploadFile] = None,
-    photo_image: Optional[UploadFile] = None,
+    bgv_doc_file: UploadFile = File(...),
+    police_verification_doc_file: UploadFile = File(...),
+    medical_verification_doc_file: UploadFile = File(...),
+    training_verification_doc_file: UploadFile = File(...),
+    eye_test_verification_doc_file: UploadFile = File(...),
+    license_doc_file: UploadFile = File(...),
+    induction_doc_file: UploadFile = File(...),
+    badge_doc_file: UploadFile = File(...),
+    alternate_govt_id_doc_file: UploadFile = File(...),
+    photo_image: UploadFile = File(...),
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["driver_management.create"]))
 ):
 
     try:
+
+        required_files = {
+            "bgv_doc_file": bgv_doc_file,
+            "police_verification_doc_file": police_verification_doc_file,
+            "medical_verification_doc_file": medical_verification_doc_file,
+            "training_verification_doc_file": training_verification_doc_file,
+            "eye_test_verification_doc_file": eye_test_verification_doc_file,
+            "license_doc_file": license_doc_file,
+            "induction_doc_file": induction_doc_file,
+            "badge_doc_file": badge_doc_file,
+            "alternate_govt_id_doc_file": alternate_govt_id_doc_file,
+            "photo_image": photo_image,
+        }
+
+        def validate_required_file(file: UploadFile, field_name: str):
+            if not file or not file.filename.strip():
+                raise HTTPException(status_code=422, detail=f"{field_name} is required.")
+
+        # usage
+        for field_name, file in required_files.items():
+            validate_required_file(file, field_name)
+
         logger.info(f"Creating driver for vendor_id={vendor_id} with email={email}")
         logger.info(f"Received form data: bgv_doc_file: {bgv_doc_file.filename if bgv_doc_file else 'None'},police_verification_doc_file: {police_verification_doc_file.filename if police_verification_doc_file else 'None'},medical_verification_doc_file: {medical_verification_doc_file.filename if medical_verification_doc_file else 'None'}, training_verification_doc_file: {training_verification_doc_file.filename if training_verification_doc_file else 'None'}, eye_test_verification_doc_file: {eye_test_verification_doc_file.filename if eye_test_verification_doc_file else 'None'}, license_doc_file: {license_doc_file.filename if license_doc_file else 'None'}, induction_doc_file: {induction_doc_file.filename if induction_doc_file else 'None'}, badge_doc_file: {badge_doc_file.filename if badge_doc_file else 'None'}, alternate_govt_id_doc_file: {alternate_govt_id_doc_file.filename if alternate_govt_id_doc_file else 'None'}, photo_image: {photo_image.filename if photo_image else 'None'}")
 
