@@ -753,30 +753,30 @@ def seed_data():
             session.flush()
 
             # --- Seed Devices ---
-            devices = [
-                Device(
-                    employee_id=drivers[1].driver_id,
-                    device_uuid="uuid-101-aaa",
-                    device_name="John's iPhone",
-                    access_token="token101",
-                    fcm_token="fcm_token_101"
-                ),
-                Device(
-                    employee_id=drivers[2].driver_id,
-                    device_uuid="uuid-102-bbb",
-                    device_name="Alice's Android",
-                    access_token="token102",
-                    fcm_token="fcm_token_102"
-                ),
-                Device(
-                    employee_id=drivers[3].driver_id,
-                    device_uuid="uuid-103-ccc",
-                    device_name="Bob's Tablet",
-                    access_token="token103",
-                    fcm_token="fcm_token_103"
-                ),
-            ]
-            session.add_all(devices)
+            # devices = [
+            #     Device(
+            #         #employee_id=drivers[0].driver_id,
+            #         device_uuid="uuid-101-aaa",
+            #         device_name="John's iPhone",
+            #         access_token="token101",
+            #         fcm_token="fcm_token_101"
+            #     ),
+            #     Device(
+            #         #employee_id=drivers[1].driver_id,
+            #         device_uuid="uuid-102-bbb",
+            #         device_name="Alice's Android",
+            #         access_token="token102",
+            #         fcm_token="fcm_token_102"
+            #     ),
+            #     Device(
+            #         #employee_id=drivers[2].driver_id,
+            #         device_uuid="uuid-103-ccc",
+            #         device_name="Bob's Tablet",
+            #         access_token="token103",
+            #         fcm_token="fcm_token_103"
+            #     ),
+            # ]
+            #session.add_all(devices)
             session.flush()
             sample_bookings = [
                  Booking(
