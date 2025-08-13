@@ -71,6 +71,13 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
         logger.info(f"[HEADERS] Content-Type: {request.headers.get('content-type')}")
         response = await call_next(request)
         return response
+    
+from fastapi.staticfiles import StaticFiles
+# Local path inside container
+UPLOAD_DIR = "/app/app/uploaded_files"
+
+# Serve at /files/... in the browser
+app.mount("/uploaded_files", StaticFiles(directory=UPLOAD_DIR), name="uploaded_files")
 
 app.add_middleware(RequestLoggerMiddleware)
 app.include_router(app_auth_router, prefix="/api")
