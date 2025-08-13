@@ -1014,7 +1014,8 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
                 "latitude": emp.latitude,
                 "longitude": emp.longitude,
                 "landmark": emp.landmark,
-                "department_name": department.department_name
+                "department_name": department.department_name,
+                "department_id": department_id
             })
 
         return {
