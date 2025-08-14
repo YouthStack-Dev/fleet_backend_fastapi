@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,7 +10,7 @@ from app.database.models import Booking, Shift
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 
-router = APIRouter(tags=["Bookings"])
+router = APIRouter(tags=["Admin Bookings"])
 logger = logging.getLogger(__name__)
 
 @router.post("/shift-bookings/", response_model=ShiftBookingResponse)
@@ -184,64 +185,55 @@ from app.api.schemas.schemas import ShiftsByDateResponse, BookingOut
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 
-router = APIRouter(tags=["Admin Bookings"])
 logger = logging.getLogger(__name__)
 
-@router.get("/admin/shift-bookings/", response_model=ShiftsByDateResponse)
+@router.get("/admin/shift-bookings/")
 def get_shift_bookings_by_date(
     date: str = Query(..., description="Date to filter bookings, format: YYYY-MM-DD"),
     token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
     db: Session = Depends(get_db)
 ):
     """
-    Admin endpoint to fetch all shifts and bookings for a specific date.
+    Admin endpoint to fetch all shifts with bookings for a specific date.
+    Returns response in a structured envelope with meta data.
     """
     tenant_id = token_data.get("tenant_id")
     logger.info(f"Fetching bookings for tenant_id={tenant_id} on date={date}")
+    request_id = str(uuid.uuid4())
 
     try:
         filter_date = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
-    # Fetch shifts for this tenant
+    # Fetch all shifts for this tenant
     shifts = db.query(Shift).filter(Shift.tenant_id == tenant_id).all()
     if not shifts:
-        logger.warning(f"No shifts found for tenant_id={tenant_id}")
-        return ShiftBookingResponse(shift_id=None, bookings=[])
+        logger.warning(f"No shifts configured for tenant_id={tenant_id}")
+        return {
+            "status": "success",
+            "code": 200,
+            "message": "No shifts configured for this tenant",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {"date": date, "shifts": []}
+        }
 
-    response_data = []
+    shifts_data = []
+    total_bookings = 0
     for shift in shifts:
-        # Filter bookings for this shift on the given date
-        bookings = (
-                db.query(Booking)
-                .options(joinedload(Booking.employee))
-                .filter(
-                    Booking.shift_id == shift.id,
-                    Booking.booking_date == filter_date
-                )
-                .all()
+        # Count bookings for this shift on the given date
+        booking_count = (
+            db.query(Booking)
+            .filter(
+                Booking.shift_id == shift.id,
+                Booking.booking_date == filter_date
             )
+            .count()
+        )
 
-        booking_list = [
-            BookingOut(
-                booking_id=b.booking_id,
-                employee_id=b.employee_id,
-                employee_code=b.employee_code,
-                employee_name=b.employee.name if b.employee else None,
-                pickup_location=b.pickup_location,
-                pickup_location_latitude=b.pickup_location_latitude,
-                pickup_location_longitude=b.pickup_location_longitude,
-                drop_location=b.drop_location,
-                drop_location_latitude=b.drop_location_latitude,
-                drop_location_longitude=b.drop_location_longitude,
-                status=b.status,
-            )
-            for b in bookings
-        ]
-
-        if booking_list:
-            response_data.append({
+        if booking_count > 0:
+            total_bookings += booking_count
+            shifts_data.append({
                 "shift_id": shift.id,
                 "shift_code": shift.shift_code,
                 "log_type": shift.log_type,
@@ -250,20 +242,23 @@ def get_shift_bookings_by_date(
                 "pickup_type": shift.pickup_type,
                 "gender": shift.gender,
                 "date": date,
+                "total_bookings": booking_count
             })
 
-    return ShiftsByDateResponse(
-        date=str(filter_date),  # also convert shift.date if needed
-        shifts=[
-            ShiftInfo(
-                shift_id=shift.id,
-                shift_code=shift.shift_code,
-                log_type=shift.log_type,
-                shift_time=shift.shift_time,
-                day=shift.day,
-                pickup_type=shift.pickup_type,
-                gender=shift.gender,
-                date=str(filter_date)
-            ) for shift in shifts
-        ]
-    )
+    if total_bookings == 0:
+        logger.info(f"No bookings found for tenant_id={tenant_id} on date={date}")
+        return {
+            "status": "success",
+            "code": 200,
+            "message": "No bookings found for the selected date",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {"date": date, "shifts": []}
+        }
+
+    return {
+        "status": "success",
+        "code": 200,
+        "message": f"Shift booking counts fetched for {date}",
+        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+        "data": {"date": date, "shifts": shifts_data}
+    }
