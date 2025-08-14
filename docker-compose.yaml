@@ -11,6 +11,15 @@ services:
     volumes:
       - servicemgr_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:latest
+    container_name: fleet_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
   service_manager:
     build:
       context: ./service_manager
@@ -18,8 +27,10 @@ services:
     container_name: service_manager
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db_servicemgr
+      - redis
     ports:
       - "8100:8100"
     volumes:
@@ -28,3 +39,4 @@ services:
 
 volumes:
   servicemgr_data:
+  redis_data:
