@@ -266,11 +266,13 @@ def get_shift_bookings_by_date(
 def get_shift_booking_details(
     shift_id: int = Query(..., description="ID of the shift"),
     date: str = Query(..., description="Date to filter bookings, format: YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Page number (starting from 1)"),
+    limit: int = Query(10, ge=1, le=100, description="Number of bookings per page"),
     token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
     db: Session = Depends(get_db)
 ):
     """
-    Admin endpoint to fetch bookings for a specific shift and date.
+    Admin endpoint to fetch bookings for a specific shift and date with pagination.
     Returns structured response with metadata.
     """
     request_id = str(uuid.uuid4())
@@ -296,18 +298,19 @@ def get_shift_booking_details(
             "data": {}
         }
 
-    # Fetch bookings for this shift and date
-    bookings = (
+    # Base query for bookings
+    bookings_query = (
         db.query(Booking)
         .options(joinedload(Booking.employee))
         .filter(
             Booking.shift_id == shift_id,
             Booking.booking_date == filter_date
         )
-        .all()
     )
 
-    if not bookings:
+    total_bookings_count = bookings_query.count()
+
+    if total_bookings_count == 0:
         logger.info(f"[{request_id}] No bookings found for shift_id={shift_id} on date={date}")
         return {
             "status": "success",
@@ -322,6 +325,9 @@ def get_shift_booking_details(
                 "bookings": []
             }
         }
+
+    # Apply pagination
+    bookings = bookings_query.offset((page - 1) * limit).limit(limit).all()
 
     # Prepare bookings data
     booking_list = [
@@ -341,19 +347,29 @@ def get_shift_booking_details(
         for b in bookings
     ]
 
-    logger.info(f"[{request_id}] Fetched {len(bookings)} bookings for shift_id={shift_id} on date={date}")
+    logger.info(f"[{request_id}] Fetched {len(bookings)} bookings (page={page}, limit={limit}) "
+                f"for shift_id={shift_id} on date={date}")
 
     # Return structured response
     return {
         "status": "success",
         "code": 200,
         "message": f"Shift bookings fetched for shift_id={shift_id} on {date}",
-        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+        "meta": {
+            "request_id": request_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_records": total_bookings_count,
+                "total_pages": (total_bookings_count + limit - 1) // limit
+            }
+        },
         "data": {
             "shift_id": shift.id,
             "shift_code": shift.shift_code,
             "date": date,
-            "total_bookings": len(bookings),
+            "total_bookings": total_bookings_count,
             "bookings": booking_list
         }
     }
