@@ -674,7 +674,19 @@ class BookingOut(BaseModel):
     drop_location_latitude: Optional[float]
     drop_location_longitude: Optional[float]
     status: str
-
+class ShiftInfo(BaseModel):
+    shift_id: int
+    shift_code: str
+    log_type: str  # "in" or "out"
+    shift_time: time
+    day: str  # e.g., "Monday"
+    pickup_type: Optional[str]  # "pickup" or "nodal"
+    gender: Optional[str]
+    date: str
+    
+class ShiftsByDateResponse(BaseModel):
+    date: str
+    shifts: List[ShiftInfo]
 class ShiftBookingResponse(BaseModel):
     shift_id: int
     bookings: List[BookingOut]
