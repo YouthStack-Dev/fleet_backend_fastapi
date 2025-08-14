@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 import logging
-from app.api.schemas.schemas import ShiftBookingResponse , BookingOut
+from app.api.schemas.schemas import ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
 from app.database.models import Booking, Shift
 from common_utils.auth.permission_checker import PermissionChecker
@@ -173,3 +173,97 @@ def generate_shift_routes(payload: GenerateRouteRequest, db: Session = Depends(g
         logger.exception("Error generating shift routes")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Error generating shift routes")
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from sqlalchemy.orm import Session, joinedload
+from typing import List
+from datetime import datetime
+import logging
+
+from app.database.models import Shift, Booking
+from app.api.schemas.schemas import ShiftsByDateResponse, BookingOut
+from common_utils.auth.permission_checker import PermissionChecker
+from app.database.database import get_db
+
+router = APIRouter(tags=["Admin Bookings"])
+logger = logging.getLogger(__name__)
+
+@router.get("/admin/shift-bookings/", response_model=ShiftsByDateResponse)
+def get_shift_bookings_by_date(
+    date: str = Query(..., description="Date to filter bookings, format: YYYY-MM-DD"),
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin endpoint to fetch all shifts and bookings for a specific date.
+    """
+    tenant_id = token_data.get("tenant_id")
+    logger.info(f"Fetching bookings for tenant_id={tenant_id} on date={date}")
+
+    try:
+        filter_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Fetch shifts for this tenant
+    shifts = db.query(Shift).filter(Shift.tenant_id == tenant_id).all()
+    if not shifts:
+        logger.warning(f"No shifts found for tenant_id={tenant_id}")
+        return ShiftBookingResponse(shift_id=None, bookings=[])
+
+    response_data = []
+    for shift in shifts:
+        # Filter bookings for this shift on the given date
+        bookings = (
+                db.query(Booking)
+                .options(joinedload(Booking.employee))
+                .filter(
+                    Booking.shift_id == shift.id,
+                    Booking.booking_date == filter_date
+                )
+                .all()
+            )
+
+        booking_list = [
+            BookingOut(
+                booking_id=b.booking_id,
+                employee_id=b.employee_id,
+                employee_code=b.employee_code,
+                employee_name=b.employee.name if b.employee else None,
+                pickup_location=b.pickup_location,
+                pickup_location_latitude=b.pickup_location_latitude,
+                pickup_location_longitude=b.pickup_location_longitude,
+                drop_location=b.drop_location,
+                drop_location_latitude=b.drop_location_latitude,
+                drop_location_longitude=b.drop_location_longitude,
+                status=b.status,
+            )
+            for b in bookings
+        ]
+
+        if booking_list:
+            response_data.append({
+                "shift_id": shift.id,
+                "shift_code": shift.shift_code,
+                "log_type": shift.log_type,
+                "shift_time": shift.shift_time,
+                "day": shift.day,
+                "pickup_type": shift.pickup_type,
+                "gender": shift.gender,
+                "date": date,
+            })
+
+    return ShiftsByDateResponse(
+        date=str(filter_date),  # also convert shift.date if needed
+        shifts=[
+            ShiftInfo(
+                shift_id=shift.id,
+                shift_code=shift.shift_code,
+                log_type=shift.log_type,
+                shift_time=shift.shift_time,
+                day=shift.day,
+                pickup_type=shift.pickup_type,
+                gender=shift.gender,
+                date=str(filter_date)
+            ) for shift in shifts
+        ]
+    )
