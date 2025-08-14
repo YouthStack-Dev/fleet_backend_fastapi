@@ -811,10 +811,6 @@ def create_employee(db: Session, employee, tenant_id):
             logger.warning(f"Email {employee.email} already exists.")
             raise HTTPException(status_code=409, detail="Email already exists.")
         
-        # --------- Validate hashed_password ---------
-        if not employee.hashed_password or not employee.hashed_password.strip():
-            logger.warning("Missing hashed_password in payload")
-            raise HTTPException(status_code=422, detail="Hashed password is required.")
 
         # --------- Validate tenant and department ---------
         tenant = db.query(Tenant).filter_by(tenant_id=tenant_id).first()
@@ -843,7 +839,7 @@ def create_employee(db: Session, employee, tenant_id):
             name=employee.name.strip(),
             email=employee.email.strip(),
             mobile_number=employee.mobile_number.strip(),
-            hashed_password=hash_password(employee.hashed_password.strip()),
+            hashed_password=hash_password(employee.employee_code.strip()),
             department_id=employee.department_id,
             tenant_id=tenant_id,
             gender=employee.gender,
@@ -852,8 +848,8 @@ def create_employee(db: Session, employee, tenant_id):
             special_need=special_need,
             special_need_start_date=employee.special_need_start_date,
             special_need_end_date=employee.special_need_end_date,
-            subscribe_via_email=employee.subscribe_via_email,
-            subscribe_via_sms=employee.subscribe_via_sms,
+            subscribe_via_email=employee.subscribe_via_email if employee.subscribe_via_email is not None else False,
+            subscribe_via_sms=employee.subscribe_via_sms if employee.subscribe_via_sms is not None else False,
             address=employee.address,
             latitude=employee.latitude,
             longitude=employee.longitude,
