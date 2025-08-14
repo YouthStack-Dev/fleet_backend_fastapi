@@ -1,4 +1,6 @@
 import math
+import uuid
+from fastapi.responses import JSONResponse
 import pandas as pd 
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1293,11 +1295,14 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     except Exception as e:
         logger.exception("Unhandled exception in get_employee_by_department")
         raise HTTPException(status_code=500, detail="Internal server error")
+    
 
-def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
+def update_employee(db: Session, employee_code: str, employee_update: EmployeeUpdate, tenant_id: int):
+    request_id = str(uuid.uuid4())
+    logger.info(f"[{request_id}] Update request for employee_code={employee_code}, tenant_id={tenant_id}, payload={employee_update.dict(exclude_unset=True)}")
+
     try:
-        logger.info(f"Updating employee with code: {employee_code} for tenant_id: {tenant_id}, payload: {employee_update.dict()}")
-
+        # 1️⃣ Fetch Employee
         db_employee = db.query(Employee).filter(
             Employee.employee_code == employee_code,
             Employee.tenant_id == tenant_id
@@ -1306,16 +1311,86 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         logger.info(f"Found employee: {db_employee}")
 
         if not db_employee:
-            logger.warning(f"Employee with code {employee_code} not found for tenant {tenant_id}")
-            raise HTTPException(status_code=404, detail="Employee not found for this tenant.")
+            return JSONResponse(
+                    status_code=404,
+                    content={
+                        "status": "error",
+                        "code": 404,
+                        "message": "Employee not found for this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
 
-        # --------- Validate Department if provided ---------
+        # 2️⃣ Check duplicate employee_code (if updated)
+        if employee_update.employee_code and employee_update.employee_code != db_employee.employee_code:
+            existing_code = db.query(Employee).filter(
+                Employee.employee_code == employee_update.employee_code,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_code:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Employee code already exists for this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 3️⃣ Check duplicate email (if updated)
+        if employee_update.email and employee_update.email.strip().lower() != (db_employee.email or "").lower():
+            new_email = employee_update.email.strip().lower()
+            existing_email = db.query(Employee).filter(
+                Employee.email == new_email,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_email:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Email already exists for another employee in this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 4️⃣ Check duplicate mobile number (if updated)
+        if employee_update.mobile_number and employee_update.mobile_number != db_employee.mobile_number:
+            existing_mobile = db.query(Employee).filter(
+                Employee.mobile_number == employee_update.mobile_number,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_mobile:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Mobile number already exists for another employee in this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 2️⃣ Validate Department
         if employee_update.department_id is not None:
-            department = db.query(Department).filter_by(department_id=employee_update.department_id, tenant_id=tenant_id).first()
+            department = db.query(Department).filter_by(
+                department_id=employee_update.department_id,
+                tenant_id=tenant_id
+            ).first()
             if not department:
-                logger.error(f"Department {employee_update.department_id} not found for tenant {tenant_id}")
+                logger.error(f"[{request_id}] Invalid department_id={employee_update.department_id}")
                 raise HTTPException(status_code=404, detail="Department not found for this tenant.")
             db_employee.department_id = employee_update.department_id
+
 
         # --------- Validate Latitude & Longitude if provided ---------
         try:
@@ -1326,79 +1401,122 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         except ValueError:
             logger.warning("Invalid latitude or longitude provided.")
             raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
+        # 4️⃣ Special Need Logic
+        special_need = employee_update.special_need.lower() if employee_update.special_need else None
+        start_date = employee_update.special_need_start_date
+        end_date = employee_update.special_need_end_date
 
-        # --------- Validate & Handle special_need logic ---------
-        if employee_update.special_need is not None:
-            special_need = employee_update.special_need.lower()
-            allowed_special_needs = ['pregnancy', 'others', 'none']
+        allowed_special_needs = ["pregnancy", "others", "none"]
+
+       # ✅ Case 1: special_need provided
+        if special_need:
             if special_need not in allowed_special_needs:
-                logger.warning(f"Invalid special_need: {employee_update.special_need}")
-                raise HTTPException(status_code=422, detail="Invalid special_need. Allowed: pregnancy, others, none.")
-
-            # Normalize "none" to None
-            if special_need == 'none':
+                logger.warning(f"[{request_id}] Invalid special_need={special_need}")
+                return EmployeeUpdateResponse(
+                    status="error",
+                    code=422,
+                    message=f"Invalid special_need. Allowed: {', '.join(allowed_special_needs)}",
+                    meta=Meta(
+                        request_id=request_id,
+                        timestamp=datetime.utcnow().isoformat()
+                    ),
+                    data=None
+                )
+            if start_date > end_date:
+                logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
+                return EmployeeUpdateResponse(
+                    status="error",
+                    code=422,
+                    message="special_need_start_date must be before special_need_end_date.",
+                    meta=Meta(
+                        request_id=request_id,
+                        timestamp=datetime.utcnow().isoformat()
+                    ),
+                    data=None
+                )
+            if special_need == "none":
+                # ❌ Dates should not be provided for 'none'
+                if start_date or end_date:
+                    logger.warning(f"[{request_id}] Dates provided with special_need=none")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="Do not provide dates when special_need is 'none'.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
                 db_employee.special_need = None
                 db_employee.special_need_start_date = None
                 db_employee.special_need_end_date = None
-
-                if employee_update.special_need_start_date or employee_update.special_need_end_date:
-                    logger.warning("Dates provided for special_need = 'none'")
-                    raise HTTPException(status_code=422, detail="Do not provide dates when special_need is 'none'.")
             else:
-                # Dates must be provided
-                if not employee_update.special_need_start_date or not employee_update.special_need_end_date:
-                    logger.warning("special_need requires both start and end dates.")
-                    raise HTTPException(status_code=422, detail="Start and end dates required for special_need.")
+                # ✅ Must have both dates
+                if not start_date or not end_date:
+                    logger.warning(f"[{request_id}] Missing dates for special_need={special_need}")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="Start and end dates are required when special_need is provided.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
 
-                if employee_update.special_need_start_date > employee_update.special_need_end_date:
-                    logger.warning("special_need_start_date is after end_date.")
-                    raise HTTPException(status_code=422, detail="special_need_start_date must be before end date.")
+                # ❌ Start date cannot be after end date
+                if start_date > end_date:
+                    logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="special_need_start_date must be before special_need_end_date.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
 
                 db_employee.special_need = special_need
-                db_employee.special_need_start_date = employee_update.special_need_start_date
-                db_employee.special_need_end_date = employee_update.special_need_end_date
+                db_employee.special_need_start_date = start_date
+                db_employee.special_need_end_date = end_date
 
-        # --------- Update other fields if provided ---------
-        if employee_update.gender is not None:
-            db_employee.gender = employee_update.gender
+        # ✅ Case 2: No special_need, but dates provided → Error
+        elif start_date or end_date:
+            logger.warning(f"[{request_id}] Dates provided without special_need")
+            return EmployeeUpdateResponse(
+                status="error",
+                code=422,
+                message="Cannot provide special_need dates without specifying a special_need.",
+                meta=Meta(
+                    request_id=request_id,
+                    timestamp=datetime.utcnow().isoformat()
+                ),
+                data=None
+            )
 
-        if employee_update.mobile_number is not None:
-            db_employee.mobile_number = employee_update.mobile_number.strip()
-        if employee_update.name is not None:
-            db_employee.name = employee_update.name.strip()
+        # 5️⃣ Generic Field Updates (only provided ones)
+        updatable_fields = [
+            "employee_code", "gender", "name", "mobile_number", "alternate_mobile_number",
+            "office", "subscribe_via_email", "subscribe_via_sms", "address",
+            "latitude", "longitude", "landmark"
+        ]
+        for field in updatable_fields:
+            value = getattr(employee_update, field)
+            if value is not None:
+                setattr(db_employee, field, value.strip() if isinstance(value, str) else value)
 
-        if employee_update.alternate_mobile_number is not None:
-            db_employee.alternate_mobile_number = employee_update.alternate_mobile_number.strip()
-
-        if employee_update.office is not None:
-            db_employee.office = employee_update.office.strip()
-
-        if employee_update.subscribe_via_email is not None:
-            db_employee.subscribe_via_email = employee_update.subscribe_via_email
-
-        if employee_update.subscribe_via_sms is not None:
-            db_employee.subscribe_via_sms = employee_update.subscribe_via_sms
-
-        if employee_update.address is not None:
-            db_employee.address = employee_update.address
-
-        if employee_update.latitude is not None:
-            db_employee.latitude = employee_update.latitude
-
-        if employee_update.longitude is not None:
-            db_employee.longitude = employee_update.longitude
-
-        if employee_update.landmark is not None:
-            db_employee.landmark = employee_update.landmark
-
+        # 6️⃣ Commit changes
         db.commit()
         db.refresh(db_employee)
+        logger.info(f"[{request_id}] Employee updated successfully")
 
-        logger.info(f"Employee {employee_code} updated successfully for tenant {tenant_id}")
-        from app.firebase.employee_push import push_employee_to_firebase
-
-        # Push updated data to Firebase
+        # 7️⃣ Push to Firebase (non-blocking failure)
         try:
+            from app.firebase.employee_push import push_employee_to_firebase
             push_employee_to_firebase(
                 tenant_id=tenant_id,
                 department_id=db_employee.department_id,
@@ -1407,50 +1525,80 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
                 name=db_employee.name
             )
         except Exception as e:
-            logger.error(f"Failed to update employee in Firebase: {str(e)}")
+            logger.error(f"[{request_id}] Firebase sync failed: {str(e)}")
 
+        # 8️⃣ Structured Response
         return {
-            "employee_code": db_employee.employee_code,
-            "department_id": db_employee.department_id,
-            "department_name": db_employee.department.department_name if db_employee.department else None,
-            "employee_id": db_employee.employee_id,
-            "name": db_employee.name,
-            "email": db_employee.email,
-            "gender": db_employee.gender,
-            "mobile_number": db_employee.mobile_number,
-            "alternate_mobile_number": db_employee.alternate_mobile_number,
-            "office": db_employee.office,
-            "special_need": db_employee.special_need,
-            "special_need_start_date": db_employee.special_need_start_date,
-            "special_need_end_date": db_employee.special_need_end_date,
-            "subscribe_via_email": db_employee.subscribe_via_email,
-            "subscribe_via_sms": db_employee.subscribe_via_sms,
-            "address": db_employee.address,
-            "latitude": db_employee.latitude,
-            "longitude": db_employee.longitude,
-            "landmark": db_employee.landmark,
+            "status": "success",
+            "code": 200,
+            "message": f"Employee {db_employee.employee_code} updated successfully",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {
+                "employee_code": db_employee.employee_code,
+                "employee_id": db_employee.employee_id,
+                "name": db_employee.name,
+                "email": db_employee.email,
+                "gender": db_employee.gender,
+                "mobile_number": db_employee.mobile_number,
+                "alternate_mobile_number": db_employee.alternate_mobile_number,
+                "office": db_employee.office,
+                "department_id": db_employee.department_id,
+                "department_name": db_employee.department.department_name if db_employee.department else None,
+                "special_need": db_employee.special_need,
+                "special_need_start_date": db_employee.special_need_start_date,
+                "special_need_end_date": db_employee.special_need_end_date,
+                "subscribe_via_email": db_employee.subscribe_via_email,
+                "subscribe_via_sms": db_employee.subscribe_via_sms,
+                "address": db_employee.address,
+                "latitude": db_employee.latitude,
+                "longitude": db_employee.longitude,
+                "landmark": db_employee.landmark,
+            }
         }
 
     except IntegrityError as e:
         db.rollback()
-        logger.error(f"IntegrityError while updating employee: {str(e.orig)}")
-        raise HTTPException(status_code=400, detail="Database integrity error while updating employee.")
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
+        return {
+            "status": "error",
+            "code": 400,
+            "message": "Database integrity error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"SQLAlchemyError while updating employee: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database error while updating employee.")
+        logger.error(f"[{request_id}] SQLAlchemyError: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Database error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except HTTPException as e:
         db.rollback()
-        logger.warning(f"HTTPException while updating employee: {str(e.detail)}")
-        raise e
+        logger.warning(f"[{request_id}] HTTPException while updating employee: {str(e.detail)}")
+        return {
+            "status": "error",
+            "code": e.status_code,
+            "message": str(e.detail),
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error while updating employee: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error while updating employee.")
-
+        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Unexpected error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 def delete_employee(db: Session, employee_code: str, tenant_id: int):
     try:
         logger.info(f"Delete request received for employee_code: {employee_code} in tenant_id: {tenant_id}")

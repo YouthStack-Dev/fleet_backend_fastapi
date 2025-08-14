@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeesByDepartmentResponse
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
@@ -44,7 +44,7 @@ async def get_employee(
     return controller.get_employee(employee_code, db, token_data["tenant_id"])
 
 
-@router.put("/{employee_code}", response_model=EmployeeRead)
+@router.put("/{employee_code}", response_model=EmployeeUpdateResponse)
 async def update_employee(
     employee_code: str,
     employee: EmployeeUpdate,

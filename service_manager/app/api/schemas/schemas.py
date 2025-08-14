@@ -113,9 +113,10 @@ class EmployeeCreate(EmployeeBase):
     hashed_password: Optional[str] = None
 
 class EmployeeUpdate(BaseModel):
-    # employee_code: Optional[str]  # Optional for update
+    employee_code: Optional[str]  # Optional for update
     gender: Optional[str] = None
     name: Optional[str] = None
+    email: Optional[str] = None
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
@@ -129,6 +130,38 @@ class EmployeeUpdate(BaseModel):
     longitude: Optional[str] = None
     landmark: Optional[str] = None
     department_id: Optional[int] = None
+
+class Meta(BaseModel):
+    request_id: str
+    timestamp: str
+
+class EmployeeData(BaseModel):
+    employee_code: str
+    employee_id: int
+    name: str
+    email: str
+    gender: Optional[str]
+    mobile_number: Optional[str]
+    alternate_mobile_number: Optional[str]
+    office: Optional[str]
+    department_id: Optional[int]
+    department_name: Optional[str]
+    special_need: Optional[SpecialNeedEnum] = None
+    special_need_start_date: Optional[date]
+    special_need_end_date: Optional[date]
+    subscribe_via_email: Optional[bool]
+    subscribe_via_sms: Optional[bool]
+    address: Optional[str]
+    latitude: Optional[str]
+    longitude: Optional[str]
+    landmark: Optional[str]
+
+class EmployeeUpdateResponse(BaseModel):
+    status: str
+    code: int
+    message: str
+    meta: Meta
+    data: Optional[EmployeeData] = None
 
 class EmployeeRead(EmployeeBase):
     employee_code: str
