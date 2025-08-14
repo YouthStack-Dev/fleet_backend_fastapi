@@ -94,8 +94,8 @@ class EmployeeBase(BaseModel):
     employee_code: str  # Added to Base as it's required for both create & update
     gender: str
     alternate_mobile_number: Optional[str]
-    office: str
-    special_need: Optional[SpecialNeedEnum]
+    office: Optional[str] = None
+    special_need: Optional[SpecialNeedEnum] = None
     special_need_start_date: Optional[date] = None
     special_need_end_date: Optional[date] = None
     subscribe_via_email: Optional[bool] = None
