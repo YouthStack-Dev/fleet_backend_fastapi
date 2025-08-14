@@ -949,93 +949,104 @@ def bulk_create_employees(file, tenant_id: int, db: Session):
         logger.info(f"Tenant found: {tenant.tenant_name}")
         import math
 
-
-    
         for idx, row in df.iterrows():
             logger.info(f"Processing row {idx + 2}: {row.to_dict()}")
             try:
-                name = str(row.get('name')).strip()
-                email = str(row.get('email')).strip()
-                mobile_number = str(row.get('mobile_number')).strip()
-                department_id = int(row.get('department_id'))
+                row_issues = []
 
-                # --- Safe employee_code generation ---
-                emp_code_from_file = row.get('employee_code')
-                if emp_code_from_file and not (isinstance(emp_code_from_file, float) and math.isnan(emp_code_from_file)):
-                    employee_code = str(emp_code_from_file).strip()
+                # --- Required fields ---
+                name_val = row.get('name')
+                email_val = row.get('email')
+                mobile_val = row.get('mobile_number')
+                department_id = row.get('department_id')
+
+                if pd.isna(name_val) or not str(name_val).strip():
+                    row_issues.append("Missing name")
+                if pd.isna(email_val) or not str(email_val).strip():
+                    row_issues.append("Missing email")
+                if pd.isna(mobile_val):
+                    row_issues.append("Missing mobile_number")
+                if pd.isna(department_id):
+                    row_issues.append("Missing department_id")
+                if pd.isna(row.get('employee_code')):
+                    row_issues.append("Missing employee_code")
+
+                # Normalize email and mobile for DB checks
+                email_val = str(email_val).strip() if pd.notna(email_val) else None
+                if pd.notna(mobile_val):
+                    mobile_val = str(int(float(mobile_val)))
                 else:
-                    employee_code = f"{tenant.tenant_name[:3].lower()}{idx+1}"
+                    mobile_val = None
+                employee_code_val = row.get('employee_code')
+                if pd.isna(employee_code_val) or not str(employee_code_val).strip():
+                    row_issues.append("Missing employee_code")
+                else:
+                    employee_code = str(employee_code_val).strip()
 
-                existing_code = db.query(Employee).filter(Employee.employee_code == employee_code).first()
-                if existing_code:
-                    employee_code += f"_{idx+1}"
-                # --- End safe employee_code ---
-                
-                gender = row.get('gender')
+
+                # --- Duplicate checks ---
+                if email_val and db.query(Employee).filter(Employee.email == email_val, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Email {email_val} exists")
+                if mobile_val and db.query(Employee).filter(Employee.mobile_number == mobile_val, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Mobile {mobile_val} exists")
+                if employee_code and db.query(Employee).filter(Employee.employee_code == employee_code, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Employee code {employee_code} exists")
+
+                # --- Special need checks ---
                 special_need = str(row.get('special_need')).lower() if row.get('special_need') else None
-                special_need_start_date = row.get('special_need_start_date')
-                special_need_end_date = row.get('special_need_end_date')
+                if special_need and special_need not in ALLOWED_SPECIAL_NEEDS:
+                    row_issues.append(f"Invalid special_need: {special_need}")
+                if special_need and special_need != 'none':
+                    start_date = row.get('special_need_start_date')
+                    end_date = row.get('special_need_end_date')
+                    if pd.isna(start_date) or pd.isna(end_date):
+                        row_issues.append("Missing special_need_start_date or special_need_end_date")
+                    elif start_date > end_date:
+                        row_issues.append("special_need_start_date > special_need_end_date")
+
+                # --- Department check ---
+                department_id = row.get('department_id')
+                if pd.isna(department_id) or not db.query(Department).filter(
+                    Department.department_id == int(department_id),
+                    Department.tenant_id == tenant_id
+                ).first():
+                    row_issues.append(f"Department {department_id} not found")
+
+                # --- Coordinates check ---
                 latitude = row.get('latitude')
                 longitude = row.get('longitude')
-                alternate_mobile_number = row.get('alternate_mobile_number')
+                try:
+                    if pd.notna(latitude): float(latitude)
+                    if pd.notna(longitude): float(longitude)
+                except ValueError:
+                    row_issues.append("Invalid latitude or longitude")
+
+                # --- If any issues, skip the row ---
+                if row_issues:
+                    skipped_employees.append({
+                        "row": idx + 2,
+                        "issues": row_issues,
+                        "reason": "Row validation failed"
+                    })
+                    continue
+
+                
+
+                # --- Prepare final values ---
+                name = str(name_val).strip()
+                email = email_val
+                mobile_number = mobile_val
+                gender = row.get('gender')
                 office = row.get('office')
+                alternate_mobile_number = row.get('alternate_mobile_number')
                 subscribe_via_email = bool(row.get('subscribe_via_email', False))
                 subscribe_via_sms = bool(row.get('subscribe_via_sms', False))
                 address = row.get('address')
                 landmark = row.get('landmark')
+                special_need = None if special_need == 'none' else special_need
+                special_need_start_date = row.get('special_need_start_date') if special_need else None
+                special_need_end_date = row.get('special_need_end_date') if special_need else None
 
-                if not name or not email or not mobile_number:
-                    logger.warning(f"Missing required fields at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": "Missing required fields"})
-                    continue
-
-                if special_need not in ALLOWED_SPECIAL_NEEDS:
-                    logger.warning(f"Invalid special_need '{special_need}' at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": f"Invalid special_need: {special_need}"})
-                    continue
-
-                if special_need == 'none':
-                    special_need = None
-                if special_need:
-                    if pd.isna(special_need_start_date) or pd.isna(special_need_end_date):
-                        logger.warning(f"Missing special_need dates at row {idx + 2}")
-                        skipped_employees.append({"row": idx + 2, "reason": "special_need dates missing"})
-                        continue
-                    if special_need_start_date > special_need_end_date:
-                        logger.warning(f"special_need_start_date > end_date at row {idx + 2}")
-                        skipped_employees.append({"row": idx + 2, "reason": "special_need_start_date > end_date"})
-                        continue
-                else:
-                    special_need_start_date = None
-                    special_need_end_date = None
-
-                department = db.query(Department).filter(
-                    Department.department_id == department_id,
-                    Department.tenant_id == tenant_id
-                ).first()
-                if not department:
-                    logger.warning(f"Department {department_id} not found at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": f"Department {department_id} not found"})
-                    continue
-
-                try:
-                    if latitude: float(latitude)
-                    if longitude: float(longitude)
-                except ValueError:
-                    logger.warning(f"Invalid coordinates at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": "Invalid coordinates"})
-                    continue
-
-                if db.query(Employee).filter(Employee.email == email, Employee.tenant_id == tenant_id).first():
-                    logger.warning(f"Email {email} exists at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": f"Email {email} exists"})
-                    continue
-                if db.query(Employee).filter(Employee.mobile_number == mobile_number, Employee.tenant_id == tenant_id).first():
-                    logger.warning(f"Mobile {mobile_number} exists at row {idx + 2}")
-                    skipped_employees.append({"row": idx + 2, "reason": f"Mobile {mobile_number} exists"})
-                    continue
-                if db.query(Employee).filter(Employee.employee_code == employee_code).first():
-                    employee_code += f"_{idx+1}"
 
                 db_employee = Employee(
                     employee_code=employee_code,
