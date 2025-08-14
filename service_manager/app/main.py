@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 load_dotenv()  # It will load .env file values into os.environ
 
 from typing import Union
@@ -71,6 +73,14 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
         logger.info(f"[HEADERS] Content-Type: {request.headers.get('content-type')}")
         response = await call_next(request)
         return response
+    
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error: {exc.errors()} | body: {exc.body}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
 import os
 from fastapi.staticfiles import StaticFiles
 # Local path inside container

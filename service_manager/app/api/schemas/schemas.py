@@ -98,8 +98,8 @@ class EmployeeBase(BaseModel):
     special_need: Optional[SpecialNeedEnum]
     special_need_start_date: Optional[date] = None
     special_need_end_date: Optional[date] = None
-    subscribe_via_email: bool
-    subscribe_via_sms: bool
+    subscribe_via_email: Optional[bool] = None
+    subscribe_via_sms: Optional[bool] = None
     address: str
     latitude: str
     longitude: str
@@ -110,7 +110,7 @@ class EmployeeCreate(EmployeeBase):
     name: str
     email: str
     mobile_number: str
-    hashed_password: str
+    hashed_password: Optional[str] = None
 
 class EmployeeUpdate(BaseModel):
     # employee_code: Optional[str]  # Optional for update
