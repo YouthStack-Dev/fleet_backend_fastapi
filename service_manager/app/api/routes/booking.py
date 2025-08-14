@@ -262,3 +262,98 @@ def get_shift_bookings_by_date(
         "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
         "data": {"date": date, "shifts": shifts_data}
     }
+@router.get("/admin/shift-booking-details/")
+def get_shift_booking_details(
+    shift_id: int = Query(..., description="ID of the shift"),
+    date: str = Query(..., description="Date to filter bookings, format: YYYY-MM-DD"),
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin endpoint to fetch bookings for a specific shift and date.
+    Returns structured response with metadata.
+    """
+    request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(f"[{request_id}] Fetching bookings for tenant_id={tenant_id}, shift_id={shift_id}, date={date}")
+
+    # Validate date format
+    try:
+        filter_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        logger.error(f"[{request_id}] Invalid date format: {date}")
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Fetch shift and verify it belongs to tenant
+    shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
+    if not shift:
+        logger.warning(f"[{request_id}] Shift not found for tenant_id={tenant_id}, shift_id={shift_id}")
+        return {
+            "status": "error",
+            "code": 404,
+            "message": "Shift not found for this tenant",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+
+    # Fetch bookings for this shift and date
+    bookings = (
+        db.query(Booking)
+        .options(joinedload(Booking.employee))
+        .filter(
+            Booking.shift_id == shift_id,
+            Booking.booking_date == filter_date
+        )
+        .all()
+    )
+
+    if not bookings:
+        logger.info(f"[{request_id}] No bookings found for shift_id={shift_id} on date={date}")
+        return {
+            "status": "success",
+            "code": 200,
+            "message": "No bookings found for this shift on the selected date",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {
+                "shift_id": shift_id,
+                "shift_code": shift.shift_code,
+                "date": date,
+                "total_bookings": 0,
+                "bookings": []
+            }
+        }
+
+    # Prepare bookings data
+    booking_list = [
+        BookingOut(
+            booking_id=b.booking_id,
+            employee_id=b.employee_id,
+            employee_code=b.employee_code,
+            employee_name=b.employee.name if b.employee else None,
+            pickup_location=b.pickup_location,
+            pickup_location_latitude=b.pickup_location_latitude,
+            pickup_location_longitude=b.pickup_location_longitude,
+            drop_location=b.drop_location,
+            drop_location_latitude=b.drop_location_latitude,
+            drop_location_longitude=b.drop_location_longitude,
+            status=b.status,
+        )
+        for b in bookings
+    ]
+
+    logger.info(f"[{request_id}] Fetched {len(bookings)} bookings for shift_id={shift_id} on date={date}")
+
+    # Return structured response
+    return {
+        "status": "success",
+        "code": 200,
+        "message": f"Shift bookings fetched for shift_id={shift_id} on {date}",
+        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+        "data": {
+            "shift_id": shift.id,
+            "shift_code": shift.shift_code,
+            "date": date,
+            "total_bookings": len(bookings),
+            "bookings": booking_list
+        }
+    }
