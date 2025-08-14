@@ -146,7 +146,7 @@ class EmployeeData(BaseModel):
     office: Optional[str]
     department_id: Optional[int]
     department_name: Optional[str]
-    special_need: Optional[str]
+    special_need: Optional[SpecialNeedEnum] = None
     special_need_start_date: Optional[date]
     special_need_end_date: Optional[date]
     subscribe_via_email: Optional[bool]
@@ -161,7 +161,7 @@ class EmployeeUpdateResponse(BaseModel):
     code: int
     message: str
     meta: Meta
-    data: EmployeeData
+    data: Optional[EmployeeData] = None
 
 class EmployeeRead(EmployeeBase):
     employee_code: str
