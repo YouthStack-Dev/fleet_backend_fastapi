@@ -1,12 +1,14 @@
+import pandas as pd  # ✅ Correct
 from psycopg2 import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models import Driver, Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
 from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
 from app.crud.errors import handle_integrity_error
 from app.database.models import Department
-from fastapi import HTTPException
+from fastapi import File, HTTPException, UploadFile
 
 from common_utils.auth.utils import hash_password
 
@@ -747,7 +749,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.database.models import Employee, User, Tenant, Department
-
+from app.firebase.employee_push import push_employee_to_firebase
 
 
 
@@ -859,7 +861,7 @@ def create_employee(db: Session, employee, tenant_id):
         db.add(db_employee)
         db.commit()
         db.refresh(db_employee)
-        from app.firebase.employee_push import push_employee_to_firebase
+        
 
         # Push to Firebase after DB commit
         try:
@@ -914,6 +916,183 @@ def create_employee(db: Session, employee, tenant_id):
         db.rollback()
         logger.error(f"Unexpected error while creating employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating employee.")
+
+    
+
+ALLOWED_SPECIAL_NEEDS = ['pregnancy', 'others', 'none', None]
+def bulk_create_employees(file, tenant_id: int, db: Session):
+    logger.info(f"Starting bulk employee creation for tenant_id: {tenant_id}, file: {file.filename}")
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        logger.warning(f"Invalid file format: {file.filename}")
+        raise HTTPException(status_code=400, detail="Only Excel files are allowed.")
+
+    try:
+        df = pd.read_excel(file.file)
+        logger.info(f"Excel file read successfully with {len(df)} rows")
+
+        required_columns = ['name', 'email', 'mobile_number', 'department_id']
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            logger.warning(f"Missing required columns: {missing_cols}")
+            raise HTTPException(status_code=422, detail=f"Missing required columns in Excel: {missing_cols}")
+
+        created_employees = []
+        skipped_employees = []
+        errors = []
+        employees_to_add = []
+
+        tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        if not tenant:
+            logger.error(f"Tenant not found: {tenant_id}")
+            raise HTTPException(status_code=404, detail="Tenant not found.")
+        logger.info(f"Tenant found: {tenant.tenant_name}")
+        import math
+
+
+    
+        for idx, row in df.iterrows():
+            logger.info(f"Processing row {idx + 2}: {row.to_dict()}")
+            try:
+                name = str(row.get('name')).strip()
+                email = str(row.get('email')).strip()
+                mobile_number = str(row.get('mobile_number')).strip()
+                department_id = int(row.get('department_id'))
+
+                # --- Safe employee_code generation ---
+                emp_code_from_file = row.get('employee_code')
+                if emp_code_from_file and not (isinstance(emp_code_from_file, float) and math.isnan(emp_code_from_file)):
+                    employee_code = str(emp_code_from_file).strip()
+                else:
+                    employee_code = f"{tenant.tenant_name[:3].lower()}{idx+1}"
+
+                existing_code = db.query(Employee).filter(Employee.employee_code == employee_code).first()
+                if existing_code:
+                    employee_code += f"_{idx+1}"
+                # --- End safe employee_code ---
+                
+                gender = row.get('gender')
+                special_need = str(row.get('special_need')).lower() if row.get('special_need') else None
+                special_need_start_date = row.get('special_need_start_date')
+                special_need_end_date = row.get('special_need_end_date')
+                latitude = row.get('latitude')
+                longitude = row.get('longitude')
+                alternate_mobile_number = row.get('alternate_mobile_number')
+                office = row.get('office')
+                subscribe_via_email = bool(row.get('subscribe_via_email', False))
+                subscribe_via_sms = bool(row.get('subscribe_via_sms', False))
+                address = row.get('address')
+                landmark = row.get('landmark')
+
+                if not name or not email or not mobile_number:
+                    logger.warning(f"Missing required fields at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": "Missing required fields"})
+                    continue
+
+                if special_need not in ALLOWED_SPECIAL_NEEDS:
+                    logger.warning(f"Invalid special_need '{special_need}' at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": f"Invalid special_need: {special_need}"})
+                    continue
+
+                if special_need == 'none':
+                    special_need = None
+                if special_need:
+                    if pd.isna(special_need_start_date) or pd.isna(special_need_end_date):
+                        logger.warning(f"Missing special_need dates at row {idx + 2}")
+                        skipped_employees.append({"row": idx + 2, "reason": "special_need dates missing"})
+                        continue
+                    if special_need_start_date > special_need_end_date:
+                        logger.warning(f"special_need_start_date > end_date at row {idx + 2}")
+                        skipped_employees.append({"row": idx + 2, "reason": "special_need_start_date > end_date"})
+                        continue
+                else:
+                    special_need_start_date = None
+                    special_need_end_date = None
+
+                department = db.query(Department).filter(
+                    Department.department_id == department_id,
+                    Department.tenant_id == tenant_id
+                ).first()
+                if not department:
+                    logger.warning(f"Department {department_id} not found at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": f"Department {department_id} not found"})
+                    continue
+
+                try:
+                    if latitude: float(latitude)
+                    if longitude: float(longitude)
+                except ValueError:
+                    logger.warning(f"Invalid coordinates at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": "Invalid coordinates"})
+                    continue
+
+                if db.query(Employee).filter(Employee.email == email, Employee.tenant_id == tenant_id).first():
+                    logger.warning(f"Email {email} exists at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": f"Email {email} exists"})
+                    continue
+                if db.query(Employee).filter(Employee.mobile_number == mobile_number, Employee.tenant_id == tenant_id).first():
+                    logger.warning(f"Mobile {mobile_number} exists at row {idx + 2}")
+                    skipped_employees.append({"row": idx + 2, "reason": f"Mobile {mobile_number} exists"})
+                    continue
+                if db.query(Employee).filter(Employee.employee_code == employee_code).first():
+                    employee_code += f"_{idx+1}"
+
+                db_employee = Employee(
+                    employee_code=employee_code,
+                    name=name,
+                    email=email,
+                    mobile_number=mobile_number,
+                    hashed_password=hash_password(employee_code),
+                    department_id=department_id,
+                    tenant_id=tenant_id,
+                    gender=gender,
+                    alternate_mobile_number=alternate_mobile_number,
+                    office=office,
+                    special_need=special_need,
+                    special_need_start_date=special_need_start_date,
+                    special_need_end_date=special_need_end_date,
+                    subscribe_via_email=subscribe_via_email,
+                    subscribe_via_sms=subscribe_via_sms,
+                    address=address,
+                    latitude=latitude,
+                    longitude=longitude,
+                    landmark=landmark
+                )
+                employees_to_add.append(db_employee)
+                logger.info(f"Prepared employee object for {employee_code} at row {idx + 2}")
+
+            except Exception as row_error:
+                logger.error(f"Error processing row {idx + 2}: {row_error}")
+                errors.append({"row": idx + 2, "error": str(row_error)})
+
+        try:
+            db.add_all(employees_to_add)
+            db.commit()
+            logger.info(f"Inserted {len(employees_to_add)} employees into the database")
+            for emp in employees_to_add:
+                created_employees.append({"employee_code": emp.employee_code, "employee_id": emp.employee_id, "name": emp.name})
+                try:
+                    push_employee_to_firebase(
+                        tenant_id=tenant_id,
+                        department_id=emp.department_id,
+                        employee_code=emp.employee_code,
+                        employee_id=emp.employee_id,
+                        name=emp.name
+                    )
+                    logger.info(f"Pushed employee {emp.employee_code} to Firebase")
+                except Exception as e:
+                    logger.error(f"Firebase push failed for {emp.employee_code}: {str(e)}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Bulk insert failed: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to save employees to the database.")
+
+        logger.info(f"Bulk employee creation completed. Created: {len(created_employees)}, Skipped: {len(skipped_employees)}, Errors: {len(errors)}")
+        return {"created": created_employees, "skipped": skipped_employees, "errors": errors}
+
+    except Exception as e:
+        logger.error(f"Bulk employee creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process the Excel file.")
 
 import traceback
 
