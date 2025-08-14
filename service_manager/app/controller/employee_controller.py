@@ -1,6 +1,5 @@
 from fastapi import HTTPException
-from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department
-
+from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees
 import traceback
 import logging
 
@@ -20,6 +19,13 @@ class EmployeeController:
         except Exception :
             raise HTTPException(status_code=500, detail="Unexpected error occurred while creating employee.")
 
+    def controller_bulk_create_employees(self, file, db, tenant_id):
+        try:
+            return bulk_create_employees(file, tenant_id, db)
+        except HTTPException as e:
+            raise e
+        except Exception:
+            raise HTTPException(status_code=500, detail="Unexpected error occurred while creating employees.")
 
     def get_employee(self, employee_code, db, tenant_id):
         try:
