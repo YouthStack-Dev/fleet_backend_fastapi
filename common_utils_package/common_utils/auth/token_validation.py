@@ -7,18 +7,12 @@ import json
 from cachetools import TTLCache
 from cachetools.keys import hashkey
 
-# Constants
-OAUTH2_V2_VALIDATION_URL_TEMPLATE = "{base_url}/as/introspect.oauth2?grant_type=urn:pingidentity.com:oauth2:grant_type:validate_bearer&response_type=code&token={token}"
-
 # Environment Variables
-OAUTH2_ENV = os.getenv("OAUTH2_ENV", "1").strip()
-OAUTH2_BASE_URL = os.getenv("OAUTH2_BASE_URL", "").strip()
-OAUTH2_VALIDATION_CLIENT_ID = os.getenv(
-    "OAUTH2_VALIDATION_CLIENT_ID", ""
-).strip()
-OAUTH2_VALIDATION_CLIENT_SECRET = os.getenv(
-    "OAUTH2_VALIDATION_CLIENT_SECRET", ""
-).strip()
+OAUTH2_ENV = os.getenv("OAUTH2_ENV", "dev").strip()
+OAUTH2_URL = os.getenv("OAUTH2_URL", "http://127.0.0.1:8000/api/auth/introspect").strip()
+X_INTROSPECT_SECRET = os.getenv("X_Introspect_Secret","Testing_").strip()
+
+
 # Redis connection settings
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
@@ -79,43 +73,87 @@ class RedisTokenManager:
             return False
         
         try:
-            prefix = "token:"
-            key = f"{prefix}{token}"
+            metadata_prefix = "opaque_token_metadata:"
+            basic_prefix = "opaque_token:"
             
+            metadata_key = f"{metadata_prefix}{token}"
+            basic_key = f"{basic_prefix}{token}"
+            
+            # Set active flag
             if isinstance(data, dict):
                 data["active"] = True
             
-            serialized_data = json.dumps(data)
-            result = self.client.setex(key, int(ttl or 3600), serialized_data)
+            # Store full payload
+            self.client.setex(metadata_key, int(ttl or 3600), json.dumps(data))
+            
+            # Store basic info for quick lookups
+            basic_data = {
+                "exp": data.get("exp", int(time.time()) + (ttl or 3600)),
+                "user_id": data.get("user_id", ""),
+                "tenant_id": data.get("tenant_id", ""),
+                "active": True
+            }
+            
+            self.client.setex(basic_key, int(ttl or 3600), json.dumps(basic_data))
             
             logging.info(
-                "Token stored in Redis: %s, TTL: %s seconds",
+                "Token stored in Redis with dual mappings: %s, TTL: %s seconds",
                 token,
                 ttl or 3600,
             )
-            return result
+            return True
         except Exception as e:
             logging.error(f"Error storing token in Redis: {str(e)}")
             return False
     
-    def get_token_data(self, token):
-        """Retrieve token data from Redis"""
+    def get_token_metadata(self, token):
+        """
+        Retrieve token data from Redis
+        
+        Args:
+            token: The token to retrieve
+            metadata_only: If True, only retrieve from the metadata store
+        """
         if not self.available:
             return None
         
         try:
-            prefix = "token:"
-            key = f"{prefix}{token}"
-            data = self.client.get(key)
+            metadata_prefix = "opaque_token_metadata:"
+            
+            metadata_key = f"{metadata_prefix}{token}"
+            
+            # First try to get full metadata
+            data = self.client.get(metadata_key)
             
             if data:
                 parsed_data = json.loads(data)
                 if isinstance(parsed_data, dict):
-                    parsed_data["source"] = "redis-cache"
+                    parsed_data["source"] = "redis-cache-metadata"
                 return parsed_data
+                                
             return None
         except Exception as e:
             logging.error(f"Error retrieving token from Redis: {str(e)}")
+            return None
+    
+    def get_token_basic_info(self, token):
+        """Get only the basic token info (exp, user_id, tenant_id, active)"""
+        if not self.available:
+            return None
+        
+        try:
+            basic_prefix = "opaque_token:"
+            basic_key = f"{basic_prefix}{token}"
+            
+            data = self.client.get(basic_key)
+            if data:
+                parsed_data = json.loads(data)
+                if isinstance(parsed_data, dict):
+                    parsed_data["source"] = "redis-cache-basic"
+                return parsed_data
+            return None
+        except Exception as e:
+            logging.error(f"Error retrieving basic token info from Redis: {str(e)}")
             return None
     
     def revoke_token(self, token):
@@ -211,49 +249,86 @@ class Oauth2AsAccessor:
     def validate_env_variables(self):
         if (
             not OAUTH2_ENV
-            or not OAUTH2_BASE_URL
-            or not OAUTH2_VALIDATION_CLIENT_ID
-            or not OAUTH2_VALIDATION_CLIENT_SECRET
+            or not OAUTH2_URL
         ):
             raise OAuthApiAccessorError(
                 "Required environment variables are not set.", 5003
             )
 
-    @staticmethod
-    def get_http_basic_auth_hash(user_name, password):
-        auth_str = f"{user_name}:{password}"
-        return f"Basic {base64.b64encode(auth_str.encode()).decode()}"
+    # @staticmethod
+    # def get_http_basic_auth_hash(user_name, password):
+    #     auth_str = f"{user_name}:{password}"
+    #     return f"Basic {base64.b64encode(auth_str.encode()).decode()}"
 
     @staticmethod
-    def get_validation_url(oauth_token):
-        base_url = OAUTH2_BASE_URL
-        if not base_url:
-            raise OAuthApiAccessorError(f"Base url is not set for {OAUTH2_ENV}", 5002)
-        return OAUTH2_V2_VALIDATION_URL_TEMPLATE.format(
-            base_url=base_url, token=oauth_token
-        )
+    def get_validation_url():
+        oauth_token_url = OAUTH2_URL
+        if not oauth_token_url:
+            raise OAuthApiAccessorError(f"OAuth token url is not set for {OAUTH2_ENV}", 5002)
+        
+        return oauth_token_url
 
     @staticmethod
-    def get_headers():
-        auth_header = Oauth2AsAccessor.get_http_basic_auth_hash(
-            OAUTH2_VALIDATION_CLIENT_ID, OAUTH2_VALIDATION_CLIENT_SECRET
-        )
+    def get_headers(token: str):
+        
         return {
-            "Authorization": auth_header,
-            "Content-Type": "application/x-www-form-urlencoded",
+            "X_Introspect_Secret": X_INTROSPECT_SECRET,
+            "Authorization": f'Bearer {token}',
+            "accept": "application/json",
         }
 
     @staticmethod
     def handle_response(response):
+
         if response.status_code == 200:
             return response.json()
-        elif response.status_code == 400:
-            return response.json()
+        # elif response.status_code == 400:
+        #     return response.json()
+        # elif response.status_code == 401:
+        #     raise HTTPException(
+        #         status_code=response,
+        #         detail="UnAuthorized"
+        #     )
         else:
-            raise OAuthApiAccessorError(
-                f"Validation API call failed with HTTP status code {response.status_code}",
-                5001,
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response.json()['detail']
             )
+            # raise OAuthApiAccessorError(
+            #     f"Validation API call failed with HTTP status code {response.status_code}",
+            #     5001,
+            # )
+
+    def store_token_inmem_cache(self, opaque_token,data,ttl=None):
+        # Fallback to in-memory cache or if Redis failed
+        metadata_prefix = "opaque_token_metadata:"
+        basic_prefix = "opaque_token:"
+        
+        metadata_key = hashkey(f"{metadata_prefix}{opaque_token}")
+        basic_key = hashkey(f"{basic_prefix}{opaque_token}")
+        expiry_time = data.get("exp", int(time.time()) + (ttl or 3600))
+        basic_data = {
+                "exp": expiry_time,
+                "user_id": data.get("user_id", ""),
+                "tenant_id": data.get("tenant_id", ""),
+                "active": True
+            }
+        
+        # Store token with active flag
+        if isinstance(data, dict):
+            data["active"] = True
+        
+        
+        self.cache[metadata_key] = (data, expiry_time)
+        self.cache[basic_key] = (basic_data, expiry_time)
+
+        logging.info(
+            "Opaque token cached in memory: %s, TTL: %s seconds",
+            opaque_token,
+            ttl,
+        )
+
+        return True
 
     def store_opaque_token(self, opaque_token, data, ttl=None):
         """
@@ -275,38 +350,45 @@ class Oauth2AsAccessor:
             if result:
                 return True
         
-        # Fallback to in-memory cache or if Redis failed
-        cache_key = hashkey(opaque_token)
-        expiry_time = time.time() + ttl
-        
-        # Store token with active flag
-        if isinstance(data, dict):
-            data["active"] = True
-        
-        self.cache[cache_key] = (data, expiry_time)
-        logging.info(
-            "Opaque token cached in memory: %s, TTL: %s seconds",
-            opaque_token,
-            ttl,
-        )
+        # Store token in in-memory cache
+        self.store_token_inmem_cache(opaque_token,data,ttl)
         return True
 
-    def get_cached_oauth2_token(self, oauth_token):
+    def get_cached_oauth2_token(self, opaque_token, metadata = True):
         # First try Redis if available
         if self.use_redis:
-            redis_data = self.redis_manager.get_token_data(oauth_token)
-            if redis_data:
-                logging.info("Token found in Redis: %s", oauth_token)
-                return redis_data
+            # Try to get the full metadata first
+            if metadata:
+                redis_data = self.redis_manager.get_token_metadata(opaque_token)
+                if redis_data:
+                    logging.info("Token metadata found in Redis: %s %s", opaque_token, redis_data)
+                    return redis_data
+
+            else:
+                redis_data = self.redis_manager.get_token_basic_info(opaque_token)
+                if redis_data:
+                    logging.info("Token basic info found in Redis: %s %s", opaque_token, redis_data)
+                    return redis_data
+
+            logging.info("Token data not found in redis")
+            return False         
         
         # Fallback to in-memory cache
-        cache_key = hashkey(oauth_token)
+        metadata_prefix = "opaque_token_metadata:"
+        basic_prefix = "opaque_token:"
+
+        if metadata:
+            cache_key = hashkey(f"{metadata_prefix}{opaque_token}")
+        else:
+            cache_key = hashkey(f"{basic_prefix}{opaque_token}")
+
         cached_item = self.cache.get(cache_key)
+
         if cached_item:
             response_data, expiry = cached_item
             if time.time() <= expiry:
-                logging.info("Returning cached response for token: %s", oauth_token)
-                response_data["source"] = "vsl-cache"
+                logging.info("Returning cached response for token: %s", opaque_token)
+                response_data["source"] = "sm-cache"
                 return response_data
             else:
                 del self.cache[cache_key]
@@ -324,15 +406,15 @@ class Oauth2AsAccessor:
         # Otherwise, perform a network call
         try:
             self.validate_env_variables()
-            url = self.get_validation_url(oauth_token)
-            headers = self.get_headers()
+            url = self.get_validation_url()
+            headers = self.get_headers(oauth_token)
             response = httpx.post(url, headers=headers)
             response_data = self.handle_response(response)
             # Only cache if response is 200 and if it contains 'exp'
-            if response.status_code == 200 and "exp" in response_data:
+            if response.status_code == 200:
                 # Calculate the expiry time based on the 'exp' field
-                expiry_time = response_data["exp"]
-                current_time = time.time()
+                expiry_time = response_data.get("exp", int(time.time()) + 3600)
+                current_time = int(time.time())
 
                 if expiry_time > current_time:
                     ttl = expiry_time - current_time
@@ -341,8 +423,9 @@ class Oauth2AsAccessor:
                         if self.use_redis:
                             self.redis_manager.store_token(oauth_token, response_data, ttl)
                         
-                        # Also store in memory cache for backward compatibility
-                        self.cache[hashkey(oauth_token)] = (response_data, expiry_time)
+                        else:
+                            self.store_token_inmem_cache(oauth_token, response_data, ttl)
+                        
                         logging.info(
                             "Response cached for token: %s, TTL: %s seconds",
                             oauth_token,
@@ -350,8 +433,13 @@ class Oauth2AsAccessor:
                         )
 
             # Indicate the source is a network call
-            response_data["source"] = "network-federate"
+            response_data["source"] = "introspect-call"
+            
             return response_data
+        
+        except HTTPException as e:
+            raise e
+        
         except Exception as ex:
             logging.warning(
                 "Error occurred in validate_oauth2_token API call: %s", str(ex)
@@ -399,3 +487,37 @@ class Oauth2AsAccessor:
         
         return results
 
+
+def access_token_validator(token, verbosity, use_cache: bool = True):
+    Oauth2AsAccessor.set_verbosity(verbosity)
+    accessor = Oauth2AsAccessor()
+    return accessor.validate_oauth2_token(token, use_cache=use_cache)
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException
+
+security = HTTPBearer()
+
+def validate_bearer_token(verbosity: int = 40, use_cache: bool = True):
+    def get_bearer_token(
+            credentials: HTTPAuthorizationCredentials = Depends(security),
+        ):
+            token = credentials.credentials
+
+            try:
+                validation_result = access_token_validator(token, verbosity, use_cache)
+                if not validation_result["active"]:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Invalid or expired token. Please authenticate again.",
+                    )
+                return validation_result
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail="The token provided is invalid or has expired. Please reauthenticate or request a new token.",
+                )
+
+    return get_bearer_token

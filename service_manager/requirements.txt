@@ -10,7 +10,6 @@ pydantic[email]
 requests
 firebase-admin>=6.5.0
 python-dotenv
-redis
 
 common_utils @ git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git@feat/jwt-enhancements#subdirectory=common_utils_package
 # pip install git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git#subdirectory=common_utils

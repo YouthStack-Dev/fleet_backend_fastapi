@@ -1,20 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, status, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Annotated, Dict, List, Optional
+from fastapi.security import OAuth2PasswordRequestForm
+from typing import Annotated
 from sqlalchemy.orm import Session
-import jwt
 import os, secrets, json, time
 from app.database.database import get_db   
 from app.api.schemas.schemas import TokenResponse
 from app.crud import crud
 from common_utils.auth.utils import create_access_token, hash_password , verify_password
 from common_utils.auth.permission_checker import PermissionChecker
-from common_utils.auth.token_validation import Oauth2AsAccessor
+from common_utils.auth.token_validation import Oauth2AsAccessor, validate_bearer_token
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.controller.user_controller import UserController
 
+security = HTTPBearer()
 router = APIRouter()
 
 # Token configuration
-TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "24"))
+TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", "1"))
+X_INTROSPECT_SECRET = os.getenv("X_Introspect_Secret","Testing_").strip()
 
 def authenticate_user(db: Session, email: str, password: str):
     user = crud.get_user_by_email(db, email)
@@ -28,40 +31,62 @@ def authenticate_user(db: Session, email: str, password: str):
 
 
 @router.post("/introspect")
-async def introspect(authorization: str = Header(...)):
+async def introspect(x_introspect_secret: str = Header(...,alias="X_Introspect_Secret"), authorization: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     """
     Validate and introspect a token, returning its associated data if valid.
     
     The token should be provided in the Authorization header as 'Bearer <token>'.
     """
-    token_parts = authorization.split()
-    if len(token_parts) != 2 or token_parts[0].lower() != "bearer":
+    
+    if x_introspect_secret != X_INTROSPECT_SECRET:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Invalid authorization header format"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You are not authorized"
         )
-    
-    token = token_parts[1]
-    oauth_accessor = Oauth2AsAccessor()
-    
+
+    token = authorization.credentials
+
     try:
-        # Get token data from token store (Redis or memory cache)
-        token_data = oauth_accessor.get_cached_oauth2_token(token)
+        # First check if token exists in Redis cache
+        oauth_accessor = Oauth2AsAccessor()
+        token_data = oauth_accessor.get_cached_oauth2_token(token, metadata=False)
         
-        if not token_data:
+        if (not isinstance(token_data, dict)) or (not token_data.get("active", False)) or time.time() > token_data.get("exp", 000):
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid or expired token"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token Expired or invalid"
             )
-            
-        if token_data.get("active") is False:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Token is no longer active"
-            )
-            
-        return token_data
         
+        user_id = token_data["user_id"]
+        tenant_id = token_data.get("tenant_id", "")
+        
+        # Get user's roles and permissions
+        user = UserController().get_user(user_id, db)
+        roles = crud.get_user_roles(db, user_id)
+        permissions = crud.get_user_permissions(db, user_id)
+        
+        # Create full token payload
+        current_time = int(time.time())
+        expiry_time = token_data.get("exp", current_time + (TOKEN_EXPIRY_HOURS * 3600))
+        
+        token_payload = {
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "email": user.username,
+            "roles": roles,
+            "permissions": permissions,
+            "token_type": "access",
+            "iat": token_data.get("iat", current_time),
+            "exp": expiry_time,
+            "active": True,
+            "jti": token_data.get("jti", secrets.token_hex(8)),
+        }
+            
+        return token_payload
+    
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -112,14 +137,6 @@ def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: S
     roles = crud.get_user_roles(db, user.user_id)
     permissions = crud.get_user_permissions(db, user.user_id)
     
-    # Create JWT token with roles and permissions
-    access_token = create_access_token(
-        user_id=user.user_id,
-        tenant_id=user.tenant_id,
-        roles=roles,
-        permissions=permissions
-    )
-    
     # Generate an opaque token to return to the client
     opaque_token = secrets.token_hex(16)
     
@@ -127,6 +144,7 @@ def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: S
     current_time = int(time.time())
     expiry_time = current_time + (TOKEN_EXPIRY_HOURS * 3600)
     
+    # Full metadata payload
     token_payload = {
         "user_id": user.user_id,
         "tenant_id": user.tenant_id,
@@ -137,7 +155,6 @@ def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: S
         "iat": current_time,
         "exp": expiry_time,
         "jti": secrets.token_hex(8),  # JWT ID for uniqueness
-        "access_token": access_token  # Store the actual JWT for potential future use
     }
     
     # Store the mapping between opaque token and JWT payload in Redis
