@@ -196,73 +196,117 @@ def get_shift_bookings_by_date(
 ):
     """
     Admin endpoint to fetch all shifts with bookings for a specific date.
-    Returns response in a structured envelope with meta data.
+    Returns response in a standardized structured envelope with meta data.
     """
-    tenant_id = token_data.get("tenant_id")
-    logger.info(f"Fetching bookings for tenant_id={tenant_id} on date={date}")
     request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(f"[{request_id}] Fetching bookings for tenant_id={tenant_id} on date={date}")
 
     try:
-        filter_date = datetime.strptime(date, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        # Validate date format
+        try:
+            filter_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            logger.error(f"[{request_id}] Invalid date format: {date}")
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+            
 
-    # Fetch all shifts for this tenant
-    shifts = db.query(Shift).filter(Shift.tenant_id == tenant_id).all()
-    if not shifts:
-        logger.warning(f"No shifts configured for tenant_id={tenant_id}")
-        return {
-            "status": "success",
-            "code": 200,
-            "message": "No shifts configured for this tenant",
-            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
-            "data": {"date": date, "shifts": []}
-        }
+        # Fetch all shifts for this tenant
+        shifts = db.query(Shift).filter(Shift.tenant_id == tenant_id).all()
+        if not shifts:
+            logger.warning(f"[{request_id}] No shifts configured for tenant_id={tenant_id}")
+            raise HTTPException(status_code=404, detail="No shifts configured for this tenant")
 
-    shifts_data = []
-    total_bookings = 0
-    for shift in shifts:
-        # Count bookings for this shift on the given date
-        booking_count = (
-            db.query(Booking)
-            .filter(
-                Booking.shift_id == shift.id,
-                Booking.booking_date == filter_date
+        # Fetch all bookings for the specified date
+        bookings = db.query(Booking).filter(Booking.tenant_id == tenant_id, Booking.booking_date == filter_date).all()
+
+        if not bookings:
+            logger.warning(f"[{request_id}] No bookings found for tenant_id={tenant_id} on date={date}")
+            raise HTTPException(status_code=404, detail="No bookings done for any shifts on the specified date")
+
+        shifts_data = []
+        total_bookings = 0
+        for shift in shifts:
+            booking_count = (
+                db.query(Booking)
+                .filter(
+                    Booking.shift_id == shift.id,
+                    Booking.booking_date == filter_date
+                )
+                .count()
             )
-            .count()
-        )
 
-        if booking_count > 0:
-            total_bookings += booking_count
-            shifts_data.append({
-                "shift_id": shift.id,
-                "shift_code": shift.shift_code,
-                "log_type": shift.log_type,
-                "shift_time": shift.shift_time,
-                "day": shift.day,
-                "pickup_type": shift.pickup_type,
-                "gender": shift.gender,
-                "date": date,
-                "total_bookings": booking_count
-            })
+            if booking_count > 0:
+                total_bookings += booking_count
+                shifts_data.append({
+                    "shift_id": shift.id,
+                    "shift_code": shift.shift_code,
+                    "log_type": shift.log_type,
+                    "shift_time": shift.shift_time,
+                    "day": shift.day,
+                    "pickup_type": shift.pickup_type,
+                    "gender": shift.gender,
+                    "date": date,
+                    "total_bookings": booking_count
+                })
 
-    if total_bookings == 0:
-        logger.info(f"No bookings found for tenant_id={tenant_id} on date={date}")
+        if total_bookings == 0:
+            logger.info(f"[{request_id}] No bookings found for tenant_id={tenant_id} on date={date}")
+            return {
+                "status": "success",
+                "code": 200,
+                "message": "No bookings found for the selected date",
+                "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                "data": {"date": date, "shifts": []}
+            }
+
         return {
             "status": "success",
             "code": 200,
-            "message": "No bookings found for the selected date",
+            "message": f"Shift booking counts fetched for {date}",
             "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
-            "data": {"date": date, "shifts": []}
+            "data": {"date": date, "shifts": shifts_data}
         }
 
-    return {
-        "status": "success",
-        "code": 200,
-        "message": f"Shift booking counts fetched for {date}",
-        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
-        "data": {"date": date, "shifts": shifts_data}
-    }
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
+        return {
+            "status": "error",
+            "code": 400,
+            "message": "Database integrity error while fetching shift bookings.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"[{request_id}] SQLAlchemyError: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Database error while fetching shift bookings.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except HTTPException as e:
+        logger.warning(f"[{request_id}] HTTPException: {str(e.detail)}")
+        return {
+            "status": "error",
+            "code": e.status_code,
+            "message": str(e.detail),
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Unexpected error while fetching shift bookings.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+
 @router.get("/admin/shift-booking-details/")
 def get_shift_booking_details(
     shift_id: int = Query(..., description="ID of the shift"),
