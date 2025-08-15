@@ -123,7 +123,7 @@ def generate_shift_routes(payload: GenerateRouteRequest, db: Session = Depends(g
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
-from datetime import datetime
+from datetime import date, datetime
 import logging
 
 from app.database.models import Shift, Booking
@@ -404,7 +404,8 @@ def suggest_routes(
             filter_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
+        if filter_date < date.today():
+            raise HTTPException(status_code=400, detail="Date cannot be in the past")
         # Fetch shift & tenant
         shift = db.query(Shift).filter(
             Shift.id == payload.shift_id,
