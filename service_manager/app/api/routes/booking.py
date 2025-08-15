@@ -209,7 +209,6 @@ def get_shift_bookings_by_date(
         except ValueError:
             logger.error(f"[{request_id}] Invalid date format: {date}")
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-            
 
         # Fetch all shifts for this tenant
         shifts = db.query(Shift).filter(Shift.tenant_id == tenant_id).all()
@@ -217,19 +216,16 @@ def get_shift_bookings_by_date(
             logger.warning(f"[{request_id}] No shifts configured for tenant_id={tenant_id}")
             raise HTTPException(status_code=404, detail="No shifts configured for this tenant")
 
-        # Fetch all bookings for the specified date
-        bookings = db.query(Booking).filter(Booking.tenant_id == tenant_id, Booking.booking_date == filter_date).all()
-
-        if not bookings:
-            logger.warning(f"[{request_id}] No bookings found for tenant_id={tenant_id} on date={date}")
-            raise HTTPException(status_code=404, detail="No bookings done for any shifts on the specified date")
-
+        # Initialize data
         shifts_data = []
         total_bookings = 0
+
+        # Loop over shifts and count bookings directly
         for shift in shifts:
             booking_count = (
                 db.query(Booking)
                 .filter(
+                    Booking.tenant_id == tenant_id,
                     Booking.shift_id == shift.id,
                     Booking.booking_date == filter_date
                 )
@@ -255,7 +251,7 @@ def get_shift_bookings_by_date(
             return {
                 "status": "success",
                 "code": 200,
-                "message": "No bookings found for the selected date",
+                "message": "No bookings done for any shifts on the specified date",
                 "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
                 "data": {"date": date, "shifts": []}
             }
@@ -306,6 +302,7 @@ def get_shift_bookings_by_date(
             "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
             "data": {}
         }
+
 
 @router.get("/admin/shift-booking-details/")
 def get_shift_booking_details(
