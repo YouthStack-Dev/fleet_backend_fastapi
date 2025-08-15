@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, validator
-from typing import List, Optional, Dict
+from typing import Any, List, Optional, Dict, Union
 from datetime import date, datetime ,time
 from typing_extensions import Literal
 from enum import Enum
@@ -747,3 +747,38 @@ class GenerateRouteResponse(BaseModel):
 
 class GenerateRouteRequest(BaseModel):
     shift_id: int
+
+class PickupDetail(BaseModel):
+    booking_id: Union[str, int]
+    employee_name: Optional[str]
+    latitude: float
+    longitude: float
+    address: Optional[str]
+
+class RouteSuggestion(BaseModel):
+    route_number: int
+    booking_ids: List[Union[str, int]]
+    pickups: List[PickupDetail]
+    estimated_distance_km: float
+    estimated_duration_min: int
+    drop_lat: float
+    drop_lng: float
+    drop_address: str
+
+class RouteSuggestionData(BaseModel):
+    shift_id: int
+    shift_code: str
+    date: str
+    total_routes: int
+    routes: List[RouteSuggestion]
+
+class RouteSuggestionResponse(BaseModel):
+    status: str
+    code: int
+    message: str
+    meta: Dict[str, Any]
+    data: Optional[RouteSuggestionData] = None
+
+class RouteSuggestionRequest(BaseModel):
+    shift_id: int
+    date: str

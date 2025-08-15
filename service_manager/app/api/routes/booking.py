@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 import logging
-from app.api.schemas.schemas import ShiftBookingResponse , BookingOut, ShiftInfo
+from app.api.schemas.schemas import PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest, RouteSuggestionResponse, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
 from app.database.models import Booking, Shift
 from common_utils.auth.permission_checker import PermissionChecker
@@ -373,3 +373,178 @@ def get_shift_booking_details(
             "bookings": booking_list
         }
     }
+
+@router.post("/admin/routes/suggest", response_model=RouteSuggestionResponse)
+def suggest_routes(
+    payload: RouteSuggestionRequest,
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin endpoint to suggest optimized routes for a shift on a specific date.
+    Does not assign drivers — generates a draft arrangement only.
+    """
+    request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(f"[{request_id}] Generating draft route suggestion for tenant_id={tenant_id}, shift_id={payload.shift_id}, date={payload.date}")
+
+    # Validate date format
+    try:
+        filter_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
+    except ValueError:
+        logger.error(f"[{request_id}] Invalid date format: {payload.date}")
+        return RouteSuggestionResponse(
+            status="error",
+            code=400,
+            message="Invalid date format. Use YYYY-MM-DD",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat()
+            },
+            data=None
+        )
+
+    # Step 1: Fetch shift & tenant
+    shift = db.query(Shift).filter(Shift.id == payload.shift_id, Shift.tenant_id == tenant_id).first()
+    if not shift or not shift.tenant:
+        logger.warning(f"[{request_id}] Shift or tenant not found")
+        return RouteSuggestionResponse(
+            status="error",
+            code=404,
+            message="Shift or tenant not found",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat()
+            },
+            data=None
+        )
+
+    tenant = shift.tenant
+    try:
+        DROP_LAT = float(tenant.latitude)
+        DROP_LNG = float(tenant.longitude)
+    except (TypeError, ValueError):
+        logger.error(f"[{request_id}] Invalid tenant coordinates")
+        return RouteSuggestionResponse(
+            status="error",
+            code=400,
+            message="Invalid tenant location data",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat()
+            },
+            data=None
+        )
+
+    # Step 2: Fetch bookings for date
+    bookings = (
+        db.query(Booking)
+        .filter(
+            Booking.shift_id == payload.shift_id,
+            Booking.booking_date == filter_date
+        )
+        .all()
+    )
+
+    if not bookings:
+        logger.info(f"[{request_id}] No bookings found for shift_id={payload.shift_id} on date={payload.date}")
+        return RouteSuggestionResponse(
+            status="error",
+            code=404,
+            message="No bookings found for this shift and date",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat()
+            },
+            data=None
+        )
+
+    # Step 3: Chunk bookings (future: from DB config)
+    def chunk(lst, n):
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+
+    booking_groups = list(chunk(bookings, 3))
+    suggested_routes = []
+
+    # Step 4: Process each group via Google Maps API
+    for idx, group in enumerate(booking_groups, start=1):
+        origin = f"{group[0].pickup_location_latitude},{group[0].pickup_location_longitude}"
+        waypoints = "|".join(
+            f"{b.pickup_location_latitude},{b.pickup_location_longitude}" 
+            for b in group[1:]
+        )
+
+        params = {
+            "origin": origin,
+            "destination": f"{DROP_LAT},{DROP_LNG}",
+            "waypoints": f"optimize:true|{waypoints}" if waypoints else "",
+            "key": GOOGLE_MAPS_API_KEY
+        }
+
+        logger.debug(f"[{request_id}] Requesting Google Maps API with: {params}")
+        response = requests.get("https://maps.googleapis.com/maps/api/directions/json", params=params)
+
+        if response.status_code != 200:
+            logger.error(f"[{request_id}] Google Maps API failed: {response.text}")
+            return RouteSuggestionResponse(
+                status="error",
+                code=500,
+                message="Failed to fetch route from Google Maps",
+                meta={
+                    "request_id": request_id,
+                    "generated_at": datetime.utcnow().isoformat()
+                },
+                data=None
+            )
+
+        data = response.json()
+        if not data.get("routes"):
+            logger.warning(f"[{request_id}] No route found for group {idx}")
+            continue
+
+        route_data = data["routes"][0]
+        order = route_data.get("waypoint_order", [])
+        legs = route_data.get("legs", [])
+
+        total_distance_km = sum(l["distance"]["value"] for l in legs) / 1000
+        total_duration_min = sum(l["duration"]["value"] for l in legs) / 60
+
+        ordered_bookings = [group[0]] + [group[1:][i] for i in order] if waypoints else group
+
+        suggested_routes.append(
+            RouteSuggestion(
+                route_number=idx,
+                booking_ids=[b.booking_id for b in ordered_bookings],
+                pickups=[
+                    PickupDetail(
+                        booking_id=b.booking_id,
+                        employee_name=b.employee.name if b.employee else None,
+                        latitude=b.pickup_location_latitude,
+                        longitude=b.pickup_location_longitude,
+                        address=b.pickup_location
+                    )
+                    for b in ordered_bookings
+                ],
+                estimated_distance_km=round(total_distance_km, 2),
+                estimated_duration_min=int(total_duration_min),
+                drop_lat=DROP_LAT,
+                drop_lng=DROP_LNG,
+                drop_address=tenant.address or "Office"
+            )
+        )
+
+    return RouteSuggestionResponse(
+        status="success",
+        code=200,
+        message=f"Draft route suggestions generated for {payload.date}",
+        meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
+        data=RouteSuggestionData(
+            shift_id=shift.id,
+            shift_code=shift.shift_code,
+            date=payload.date,
+            total_routes=len(suggested_routes),
+            routes=suggested_routes
+        )
+    )
+
