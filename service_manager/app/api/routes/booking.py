@@ -5,71 +5,16 @@ from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 import logging
-from app.api.schemas.schemas import PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest, RouteSuggestionResponse, ShiftBookingResponse , BookingOut, ShiftInfo
+from app.api.schemas.schemas import PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
 from app.database.models import Booking, Shift
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
-
 router = APIRouter(tags=["Admin Bookings"])
 logger = logging.getLogger(__name__)
-
-@router.post("/shift-bookings/", response_model=ShiftBookingResponse)
-def get_shift_bookings(
-    shift_id: int = Body(..., embed=True),
-    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
-    db: Session = Depends(get_db),
-):
-    tenant_id = token_data.get("tenant_id")
-    logger.info(f"Fetching bookings for shift_id={shift_id}, tenant_id={tenant_id}")
-
-    shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
-    if not shift:
-        logger.warning(f"Shift not found: shift_id={shift_id}, tenant_id={tenant_id}")
-        raise HTTPException(status_code=404, detail="Shift not found for this tenant")
-
-    bookings = (
-        db.query(Booking)
-        .options(joinedload(Booking.employee))
-        .filter(Booking.shift_id == shift_id)
-        .all()
-    )
-
-    result = [
-        BookingOut(
-            booking_id=b.booking_id,
-            employee_id=b.employee_id,
-            employee_code=b.employee_code,
-            employee_name = b.employee.name if b.employee else None,
-            pickup_location=b.pickup_location,
-            pickup_location_latitude=b.pickup_location_latitude,
-            pickup_location_longitude=b.pickup_location_longitude,
-            drop_location=b.drop_location,
-            drop_location_latitude=b.drop_location_latitude,
-            drop_location_longitude=b.drop_location_longitude,
-            status=b.status,
-        )
-        for b in bookings
-    ]
-
-    return ShiftBookingResponse(shift_id=shift_id, bookings=result)
-
-
-
-
 import traceback
-import logging
 import requests
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
-from app.api.schemas.schemas import (
-    GenerateRouteRequest,
-    GenerateRouteResponse,
-    TempRoute,
-    PickupPoint
-)
 import os
-logger = logging.getLogger(__name__)
 # GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")  # Set this in your .env
 GOOGLE_MAPS_API_KEY = "AIzaSyCI7CwlYJ6Qt5pQGW--inSsJmdEManW-K0"  
 
@@ -321,100 +266,123 @@ def get_shift_booking_details(
     tenant_id = token_data.get("tenant_id")
     logger.info(f"[{request_id}] Fetching bookings for tenant_id={tenant_id}, shift_id={shift_id}, date={date}")
 
-    # Validate date format
     try:
-        filter_date = datetime.strptime(date, "%Y-%m-%d").date()
-    except ValueError:
-        logger.error(f"[{request_id}] Invalid date format: {date}")
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        # Validate date format
+        try:
+            filter_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            logger.error(f"[{request_id}] Invalid date format: {date}")
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
-    # Fetch shift and verify it belongs to tenant
-    shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
-    if not shift:
-        logger.warning(f"[{request_id}] Shift not found for tenant_id={tenant_id}, shift_id={shift_id}")
+        # Fetch shift and verify it belongs to tenant
+        shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
+        if not shift:
+            logger.warning(f"[{request_id}] Shift not found for tenant_id={tenant_id}, shift_id={shift_id}")
+            raise HTTPException(status_code=404, detail="Shift not found for this tenant")
+
+        # Base query for bookings
+        bookings_query = (
+            db.query(Booking)
+            .options(joinedload(Booking.employee))
+            .filter(
+                Booking.shift_id == shift_id,
+                Booking.booking_date == filter_date
+            )
+        )
+
+        total_bookings_count = bookings_query.count()
+
+        if total_bookings_count == 0:
+            logger.info(f"[{request_id}] No bookings found for shift_id={shift_id} on date={date}")
+            raise HTTPException(status_code=200, detail="No bookings found for this shift on the selected date")
+
+        # Apply pagination
+        bookings = bookings_query.offset((page - 1) * limit).limit(limit).all()
+
+        # Prepare bookings data
+        booking_list = [
+            BookingOut(
+                booking_id=b.booking_id,
+                employee_id=b.employee_id,
+                employee_code=b.employee_code,
+                employee_name=b.employee.name if b.employee else None,
+                pickup_location=b.pickup_location,
+                pickup_location_latitude=b.pickup_location_latitude,
+                pickup_location_longitude=b.pickup_location_longitude,
+                drop_location=b.drop_location,
+                drop_location_latitude=b.drop_location_latitude,
+                drop_location_longitude=b.drop_location_longitude,
+                status=b.status,
+            )
+            for b in bookings
+        ]
+
+        logger.info(f"[{request_id}] Fetched {len(bookings)} bookings "
+                    f"(page={page}, limit={limit}) for shift_id={shift_id} on date={date}")
+
+        # Success response
+        return {
+            "status": "success",
+            "code": 200,
+            "message": f"Shift bookings fetched for shift_id={shift_id} on {date}",
+            "meta": {
+                "request_id": request_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total_records": total_bookings_count,
+                    "total_pages": (total_bookings_count + limit - 1) // limit
+                }
+            },
+            "data": {
+                "shift_id": shift.id,
+                "shift_code": shift.shift_code,
+                "date": date,
+                "total_bookings": total_bookings_count,
+                "bookings": booking_list
+            }
+        }
+
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
         return {
             "status": "error",
-            "code": 404,
-            "message": "Shift not found for this tenant",
+            "code": 400,
+            "message": "Database integrity error while fetching shift booking details.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"[{request_id}] SQLAlchemyError: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Database error while fetching shift booking details.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except HTTPException as e:
+        logger.warning(f"[{request_id}] HTTPException: {e.detail}")
+        return {
+            "status": "error",
+            "code": e.status_code,
+            "message": str(e.detail),
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
+    except Exception as e:
+        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Unexpected error while fetching shift booking details.",
             "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
             "data": {}
         }
 
-    # Base query for bookings
-    bookings_query = (
-        db.query(Booking)
-        .options(joinedload(Booking.employee))
-        .filter(
-            Booking.shift_id == shift_id,
-            Booking.booking_date == filter_date
-        )
-    )
-
-    total_bookings_count = bookings_query.count()
-
-    if total_bookings_count == 0:
-        logger.info(f"[{request_id}] No bookings found for shift_id={shift_id} on date={date}")
-        return {
-            "status": "success",
-            "code": 200,
-            "message": "No bookings found for this shift on the selected date",
-            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
-            "data": {
-                "shift_id": shift_id,
-                "shift_code": shift.shift_code,
-                "date": date,
-                "total_bookings": 0,
-                "bookings": []
-            }
-        }
-
-    # Apply pagination
-    bookings = bookings_query.offset((page - 1) * limit).limit(limit).all()
-
-    # Prepare bookings data
-    booking_list = [
-        BookingOut(
-            booking_id=b.booking_id,
-            employee_id=b.employee_id,
-            employee_code=b.employee_code,
-            employee_name=b.employee.name if b.employee else None,
-            pickup_location=b.pickup_location,
-            pickup_location_latitude=b.pickup_location_latitude,
-            pickup_location_longitude=b.pickup_location_longitude,
-            drop_location=b.drop_location,
-            drop_location_latitude=b.drop_location_latitude,
-            drop_location_longitude=b.drop_location_longitude,
-            status=b.status,
-        )
-        for b in bookings
-    ]
-
-    logger.info(f"[{request_id}] Fetched {len(bookings)} bookings (page={page}, limit={limit}) "
-                f"for shift_id={shift_id} on date={date}")
-
-    # Return structured response
-    return {
-        "status": "success",
-        "code": 200,
-        "message": f"Shift bookings fetched for shift_id={shift_id} on {date}",
-        "meta": {
-            "request_id": request_id,
-            "timestamp": datetime.utcnow().isoformat(),
-            "pagination": {
-                "page": page,
-                "limit": limit,
-                "total_records": total_bookings_count,
-                "total_pages": (total_bookings_count + limit - 1) // limit
-            }
-        },
-        "data": {
-            "shift_id": shift.id,
-            "shift_code": shift.shift_code,
-            "date": date,
-            "total_bookings": total_bookings_count,
-            "bookings": booking_list
-        }
-    }
 
 @router.post("/admin/routes/suggest", response_model=RouteSuggestionResponse)
 def suggest_routes(
