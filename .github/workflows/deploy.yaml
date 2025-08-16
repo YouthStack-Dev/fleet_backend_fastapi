@@ -58,6 +58,11 @@ jobs:
           echo "${{ secrets.FIREBASE_KEY_JSON }}" | base64 -d > ~/firebase_key.json
           cat <<EOF > ~/service.env
           FIREBASE_KEY_PATH=/app/secrets/firebase_key.json
+          REDIS_URL=${{ secrets.REDIS_URL }}
+          OAUTH2_ENV=${{ secrets.OAUTH2_ENV }}
+          DEV_OAUTH2_URL=${{ secrets.DEV_OAUTH2_URL }}
+          PROD_OAUTH2_URL=${{ secrets.PROD_OAUTH2_URL }}
+          X_INTROSPECT_SECRET=${{ secrets.X_INTROSPECT_SECRET }}
           EOF
           docker compose -f ~/docker-compose.prod.yml down --volumes --remove-orphans
           docker image prune -af
