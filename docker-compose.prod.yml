@@ -38,7 +38,6 @@ services:
     # ✅ Internal container-to-container DB + Redis connection
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
-      - REDIS_URL=redis://redis_server:6379/0
 
     depends_on:
       - db_servicemgr
