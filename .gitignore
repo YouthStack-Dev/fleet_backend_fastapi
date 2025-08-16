@@ -11,3 +11,4 @@ venv/*
 # inside service_manager/.gitignore
 service_manager/app/firebase/firebase_key.json
 .env
+
