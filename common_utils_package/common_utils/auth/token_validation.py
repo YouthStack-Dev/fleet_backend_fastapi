@@ -255,16 +255,16 @@ class Oauth2AsAccessor:
                 "Required environment variables are not set.", 5003
             )
 
-    # @staticmethod
-    # def get_http_basic_auth_hash(user_name, password):
-    #     auth_str = f"{user_name}:{password}"
-    #     return f"Basic {base64.b64encode(auth_str.encode()).decode()}"
-
     @staticmethod
     def get_validation_url():
         oauth_token_url = OAUTH2_URL
         if not oauth_token_url:
             raise OAuthApiAccessorError(f"OAuth token url is not set for {OAUTH2_ENV}", 5002)
+        
+        # Ensure URL has a protocol (http:// or https://)
+        if not oauth_token_url.startswith(('http://', 'https://')):
+            oauth_token_url = f"https://{oauth_token_url}"
+            logging.warning(f"Protocol missing from OAUTH2_URL. Using: {oauth_token_url}")
         
         return oauth_token_url
 
@@ -405,10 +405,21 @@ class Oauth2AsAccessor:
         logging.info("Cache miss")
         # Otherwise, perform a network call
         try:
+            logging.debug("OAUTH2_ENV: %s", OAUTH2_ENV)
             self.validate_env_variables()
             url = self.get_validation_url()
             headers = self.get_headers(oauth_token)
-            response = httpx.post(url, headers=headers)
+            
+            # Add debug logging for the request
+            logging.info(f"Making request to: {url}")
+            logging.debug(f"Request headers: {headers}")
+            
+            # Set timeout to avoid hanging requests
+            response = httpx.post(url, headers=headers, timeout=30.0)
+            
+            logging.debug(f"Response status: {response.status_code}")
+            logging.debug(f"Response headers: {response.headers}")
+            
             response_data = self.handle_response(response)
             # Only cache if response is 200 and if it contains 'exp'
             if response.status_code == 200:
@@ -440,11 +451,29 @@ class Oauth2AsAccessor:
         except HTTPException as e:
             raise e
         
-        except Exception as ex:
-            logging.warning(
-                "Error occurred in validate_oauth2_token API call: %s", str(ex)
+        except httpx.TimeoutException:
+            logging.error("Request to OAuth2 server timed out. Server might be down or unreachable.")
+            raise HTTPException(
+                status_code=503,
+                detail="Try logging in again! Authentication server is not responding. Please try again later."
             )
-            raise
+            
+        except httpx.ConnectError as ex:
+            logging.error(f"Connection error to OAuth2 server: {str(ex)}")
+            raise HTTPException(
+                status_code=503,
+                detail="Try logging in again! Could not connect to authentication server. Please check your network."
+            )
+            
+        except Exception as ex:
+            logging.error(
+                "Error occurred in validate_oauth2_token API call: %s", str(ex),
+                exc_info=True  # Include full traceback for better debugging
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Try logging in again! Authentication process failed. Please try again or contact support."
+            )
 
     def revoke_token(self, token):
         """Mark a token as inactive/revoked"""
