@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, validator
-from typing import List, Optional, Dict
+from typing import Any, List, Optional, Dict, Union
 from datetime import date, datetime ,time
 from typing_extensions import Literal
 from enum import Enum
@@ -94,8 +94,8 @@ class EmployeeBase(BaseModel):
     employee_code: str  # Added to Base as it's required for both create & update
     gender: str
     alternate_mobile_number: Optional[str]
-    office: str
-    special_need: Optional[SpecialNeedEnum]
+    office: Optional[str] = None
+    special_need: Optional[SpecialNeedEnum] = None
     special_need_start_date: Optional[date] = None
     special_need_end_date: Optional[date] = None
     subscribe_via_email: Optional[bool] = None
@@ -113,9 +113,10 @@ class EmployeeCreate(EmployeeBase):
     hashed_password: Optional[str] = None
 
 class EmployeeUpdate(BaseModel):
-    # employee_code: Optional[str]  # Optional for update
+    employee_code: Optional[str]  # Optional for update
     gender: Optional[str] = None
     name: Optional[str] = None
+    email: Optional[str] = None
     mobile_number: Optional[str] = None
     alternate_mobile_number: Optional[str] = None
     office: Optional[str] = None
@@ -129,6 +130,38 @@ class EmployeeUpdate(BaseModel):
     longitude: Optional[str] = None
     landmark: Optional[str] = None
     department_id: Optional[int] = None
+
+class Meta(BaseModel):
+    request_id: str
+    timestamp: str
+
+class EmployeeData(BaseModel):
+    employee_code: str
+    employee_id: int
+    name: str
+    email: str
+    gender: Optional[str]
+    mobile_number: Optional[str]
+    alternate_mobile_number: Optional[str]
+    office: Optional[str]
+    department_id: Optional[int]
+    department_name: Optional[str]
+    special_need: Optional[SpecialNeedEnum] = None
+    special_need_start_date: Optional[date]
+    special_need_end_date: Optional[date]
+    subscribe_via_email: Optional[bool]
+    subscribe_via_sms: Optional[bool]
+    address: Optional[str]
+    latitude: Optional[str]
+    longitude: Optional[str]
+    landmark: Optional[str]
+
+class EmployeeUpdateResponse(BaseModel):
+    status: str
+    code: int
+    message: str
+    meta: Meta
+    data: Optional[EmployeeData] = None
 
 class EmployeeRead(EmployeeBase):
     employee_code: str
@@ -674,7 +707,19 @@ class BookingOut(BaseModel):
     drop_location_latitude: Optional[float]
     drop_location_longitude: Optional[float]
     status: str
-
+class ShiftInfo(BaseModel):
+    shift_id: int
+    shift_code: str
+    log_type: str  # "in" or "out"
+    shift_time: time
+    day: str  # e.g., "Monday"
+    pickup_type: Optional[str]  # "pickup" or "nodal"
+    gender: Optional[str]
+    date: str
+    
+class ShiftsByDateResponse(BaseModel):
+    date: str
+    shifts: List[ShiftInfo]
 class ShiftBookingResponse(BaseModel):
     shift_id: int
     bookings: List[BookingOut]
@@ -702,3 +747,38 @@ class GenerateRouteResponse(BaseModel):
 
 class GenerateRouteRequest(BaseModel):
     shift_id: int
+
+class PickupDetail(BaseModel):
+    booking_id: Union[str, int]
+    employee_name: Optional[str]
+    latitude: float
+    longitude: float
+    address: Optional[str]
+
+class RouteSuggestion(BaseModel):
+    route_number: int
+    booking_ids: List[Union[str, int]]
+    pickups: List[PickupDetail]
+    estimated_distance_km: float
+    estimated_duration_min: int
+    drop_lat: float
+    drop_lng: float
+    drop_address: str
+
+class RouteSuggestionData(BaseModel):
+    shift_id: int
+    shift_code: str
+    date: str
+    total_routes: int
+    routes: List[RouteSuggestion]
+
+class RouteSuggestionResponse(BaseModel):
+    status: str
+    code: int
+    message: str
+    meta: Dict[str, Any]
+    data: Optional[RouteSuggestionData] = None
+
+class RouteSuggestionRequest(BaseModel):
+    shift_id: int
+    date: str

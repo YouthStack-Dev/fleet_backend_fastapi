@@ -1,14 +1,20 @@
-from psycopg2 import IntegrityError
+import math
+import uuid
+from fastapi.responses import JSONResponse
+import pandas as pd 
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models import Driver, Tenant, Service, Group, Policy, User, Role, Module, user_tenant, group_role, user_role, group_user,Cutoff , Shift
 from app.api.schemas.schemas import *
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
 from app.crud.errors import handle_integrity_error
 from app.database.models import Department
-from fastapi import HTTPException
+from fastapi import File, HTTPException, UploadFile
 
 from common_utils.auth.utils import hash_password
+
+
 
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
@@ -747,7 +753,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.database.models import Employee, User, Tenant, Department
-
+from app.firebase.employee_push import push_employee_to_firebase
 
 
 
@@ -859,7 +865,7 @@ def create_employee(db: Session, employee, tenant_id):
         db.add(db_employee)
         db.commit()
         db.refresh(db_employee)
-        from app.firebase.employee_push import push_employee_to_firebase
+        
 
         # Push to Firebase after DB commit
         try:
@@ -914,6 +920,268 @@ def create_employee(db: Session, employee, tenant_id):
         db.rollback()
         logger.error(f"Unexpected error while creating employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Unexpected error while creating employee.")
+
+    
+
+def clean_for_json(val):
+    if val is None:
+        return None
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return None
+    return val
+
+def clean_employee_dict(emp_dict):
+    """Recursively clean dict values for JSON serialization."""
+    for k, v in emp_dict.items():
+        if isinstance(v, dict):
+            emp_dict[k] = clean_employee_dict(v)
+        else:
+            emp_dict[k] = clean_for_json(v)
+    return emp_dict
+
+def safe_float(val):
+    """Convert pandas float to JSON-safe float or None."""
+    if val is None or pd.isna(val) or isinstance(val, float) and math.isnan(val):
+        return None
+    return float(val)
+
+ALLOWED_SPECIAL_NEEDS = ['pregnancy', 'others', 'none', None]
+
+
+def bulk_create_employees(file, tenant_id: int, db: Session):
+
+    logger.info(f"Starting bulk employee creation for tenant_id: {tenant_id}, file: {file.filename}")
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        logger.warning(f"Invalid file format: {file.filename}")
+        raise HTTPException(status_code=400, detail="Only Excel files are allowed.")
+
+    try:
+        df = pd.read_excel(file.file)
+        logger.info(f"Excel file read successfully with {len(df)} rows")
+
+        required_columns = ['name', 'email', 'mobile_number', 'department_id', 'employee_code']
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            logger.warning(f"Missing required columns: {missing_cols}")
+            raise HTTPException(status_code=422, detail=f"Missing required columns in Excel: {missing_cols}")
+
+        created_employees = []
+        skipped_employees = []
+        errors = []
+        employees_to_add = []
+
+        tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+        if not tenant:
+            logger.error(f"Tenant not found: {tenant_id}")
+            raise HTTPException(status_code=404, detail="Tenant not found.")
+        logger.info(f"Tenant found: {tenant.tenant_name}")
+
+        for idx, row in df.iterrows():
+            logger.info(f"Processing row {idx + 2}: {row.to_dict()}")
+            try:
+                mobile_val_str = None
+                if pd.notna(row.get('mobile_number')):
+                    try:
+                        mobile_val_str = str(int(float(row.get('mobile_number'))))
+                    except (ValueError, TypeError):
+                        row_issues.append("Invalid mobile_number")
+                latitude = safe_float(row.get('latitude'))
+                longitude = safe_float(row.get('longitude'))
+                alternate_mobile_val = safe_float(row.get('alternate_mobile_number'))
+                row_issues = []
+
+                # --- Required fields ---
+                name_val = row.get('name')
+                email_val = row.get('email')
+                mobile_val = row.get('mobile_number')
+                department_id_val = row.get('department_id')
+                employee_code_val = row.get('employee_code')
+
+                if pd.isna(name_val) or not str(name_val).strip():
+                    row_issues.append("Missing name")
+                if pd.isna(email_val) or not str(email_val).strip():
+                    row_issues.append("Missing email")
+                mobile_val = row.get('mobile_number')
+                mobile_val_str = None
+                if pd.isna(mobile_val):
+                    row_issues.append("Missing mobile_number")
+                else:
+                    try:
+                        # Convert to integer safely
+                        mobile_val_str = str(int(float(mobile_val)))
+                    except (ValueError, TypeError):
+                        row_issues.append("Invalid mobile_number")
+                if pd.isna(department_id_val):
+                    row_issues.append("Missing department_id")
+                if pd.isna(employee_code_val) or not str(employee_code_val).strip():
+                    row_issues.append("Missing employee_code")
+
+                # Normalize for DB checks
+                email_val = str(email_val).strip() if pd.notna(email_val) else None
+                mobile_val = mobile_val_str
+                employee_code_val = str(employee_code_val).strip() if pd.notna(employee_code_val) else None
+                department_id_int = int(department_id_val) if pd.notna(department_id_val) else None
+
+                # --- Duplicate checks ---
+                if email_val and db.query(Employee).filter(Employee.email == email_val, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Email {email_val} exists")
+                if mobile_val and db.query(Employee).filter(Employee.mobile_number == mobile_val, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Mobile {mobile_val} exists")
+                if employee_code_val and db.query(Employee).filter(Employee.employee_code == employee_code_val, Employee.tenant_id == tenant_id).first():
+                    row_issues.append(f"Employee code {employee_code_val} exists")
+
+                # --- Special need checks ---
+                special_need_val = str(row.get('special_need')).lower() if row.get('special_need') else None
+                if special_need_val and special_need_val not in ALLOWED_SPECIAL_NEEDS:
+                    row_issues.append(f"Invalid special_need: {special_need_val}")
+                if special_need_val and special_need_val != 'none':
+                    special_need_start_date = row.get('special_need_start_date')
+                    if pd.isna(special_need_start_date):
+                        special_need_start_date = None
+
+                    special_need_end_date = row.get('special_need_end_date')
+                    if pd.isna(special_need_end_date):
+                        special_need_end_date = None
+
+                    if special_need_val and special_need_val != 'none':
+                        if not special_need_start_date or not special_need_end_date:
+                            row_issues.append("Missing special_need_start_date or special_need_end_date")
+                        elif special_need_start_date > special_need_end_date:
+                            row_issues.append("special_need_start_date > special_need_end_date")
+
+
+                # --- Department check ---
+                department = db.query(Department).filter(
+                    Department.department_id == department_id_int,
+                    Department.tenant_id == tenant_id
+                ).first()
+                if not department:
+                    row_issues.append(f"Department {department_id_val} not found")
+
+                # --- Coordinates check ---
+                latitude_val = row.get('latitude')
+                if pd.notna(latitude_val) and not math.isnan(latitude_val):
+                    latitude_val = float(latitude_val)
+                else:
+                    latitude_val = None
+
+                longitude_val = row.get('longitude')
+                if pd.notna(longitude_val) and not math.isnan(longitude_val):
+                    longitude_val = float(longitude_val)
+                else:
+                    longitude_val = None
+                # --- Skip row if any issues ---
+                if row_issues:
+                    skipped_employees.append({
+                        "row": idx + 2,
+                        "issues": row_issues,
+                        "department_id": department_id_val,
+                        "reason": "Row validation failed"
+                    })
+                    continue
+
+                # --- Prepare final values ---
+                name = str(name_val).strip()
+                email = email_val
+                mobile_number = mobile_val
+                gender = row.get('gender')
+                office = row.get('office')
+                alternate_mobile_number = row.get('alternate_mobile_number')
+                subscribe_via_email = bool(row.get('subscribe_via_email', False))
+                subscribe_via_sms = bool(row.get('subscribe_via_sms', False))
+                address = row.get('address')
+                landmark = row.get('landmark')
+                special_need = None if special_need_val == 'none' else special_need_val
+                special_need_start_date = row.get('special_need_start_date') if special_need else None
+                special_need_end_date = row.get('special_need_end_date') if special_need else None
+
+                db_employee = Employee(
+                    employee_code=employee_code_val,
+                    name=name,
+                    email=email,
+                    mobile_number=mobile_number,
+                    hashed_password=hash_password(employee_code_val),
+                    department_id=department.department_id,
+                    tenant_id=tenant_id,
+                    gender=gender,
+                    alternate_mobile_number=alternate_mobile_number,
+                    office=office,
+                    special_need=special_need,
+                    special_need_start_date=special_need_start_date,
+                    special_need_end_date=special_need_end_date,
+                    subscribe_via_email=subscribe_via_email,
+                    subscribe_via_sms=subscribe_via_sms,
+                    address=address,
+                    latitude=latitude,
+                    longitude=longitude,
+                    landmark=landmark
+                )
+                employees_to_add.append(db_employee)
+                logger.info(f"Prepared employee object for {employee_code_val} at row {idx + 2}")
+
+            except Exception as row_error:
+                logger.error(f"Error processing row {idx + 2}: {row_error}")
+                errors.append({"row": idx + 2, "error": str(row_error)})
+
+        # --- Insert all valid employees ---
+        try:
+            db.add_all(employees_to_add)
+            db.commit()
+            logger.info(f"Inserted {len(employees_to_add)} employees into the database")
+            for emp in employees_to_add:
+                department = db.query(Department).filter(Department.department_id == emp.department_id).first()
+                created_employees.append({
+                    "employee_code": emp.employee_code,
+                    "employee_id": emp.employee_id,
+                    "name": emp.name,
+                    "email": emp.email,
+                    "mobile_number": emp.mobile_number,
+                    "department_id": emp.department_id,
+                    "department_name": department.department_name if department else None,
+                    "gender": emp.gender,
+                    "alternate_mobile_number": emp.alternate_mobile_number,
+                    "office": emp.office,
+                    "special_need": emp.special_need,
+                    "special_need_start_date": emp.special_need_start_date,
+                    "special_need_end_date": emp.special_need_end_date,
+                    "subscribe_via_email": emp.subscribe_via_email,
+                    "subscribe_via_sms": emp.subscribe_via_sms,
+                    "address": emp.address,
+                    "latitude": emp.latitude,
+                    "longitude": emp.longitude,
+                    "landmark": emp.landmark
+                })
+
+                try:
+                    push_employee_to_firebase(
+                        tenant_id=tenant_id,
+                        department_id=emp.department_id,
+                        employee_code=emp.employee_code,
+                        employee_id=emp.employee_id,
+                        name=emp.name
+                    )
+                    logger.info(f"Pushed employee {emp.employee_code} to Firebase")
+                except Exception as e:
+                    logger.error(f"Firebase push failed for {emp.employee_code}: {str(e)}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Bulk insert failed: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to save employees to the database.")
+
+        logger.info(f"Bulk employee creation completed. Created: {len(created_employees)}, Skipped: {len(skipped_employees)}, Errors: {len(errors)}")
+        created_employees = [clean_employee_dict(emp) for emp in created_employees]
+        skipped_employees = [clean_employee_dict(emp) for emp in skipped_employees]
+        errors = [clean_employee_dict(emp) for emp in errors]
+
+        return {
+            "created": created_employees,
+            "skipped": skipped_employees,
+            "errors": errors
+        }
+    except Exception as e:
+        logger.error(f"Bulk employee creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process the Excel file.")
 
 import traceback
 
@@ -1027,11 +1295,14 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     except Exception as e:
         logger.exception("Unhandled exception in get_employee_by_department")
         raise HTTPException(status_code=500, detail="Internal server error")
+    
 
-def update_employee(db: Session, employee_code: str, employee_update, tenant_id: int):
+def update_employee(db: Session, employee_code: str, employee_update: EmployeeUpdate, tenant_id: int):
+    request_id = str(uuid.uuid4())
+    logger.info(f"[{request_id}] Update request for employee_code={employee_code}, tenant_id={tenant_id}, payload={employee_update.dict(exclude_unset=True)}")
+
     try:
-        logger.info(f"Updating employee with code: {employee_code} for tenant_id: {tenant_id}, payload: {employee_update.dict()}")
-
+        # 1️⃣ Fetch Employee
         db_employee = db.query(Employee).filter(
             Employee.employee_code == employee_code,
             Employee.tenant_id == tenant_id
@@ -1040,16 +1311,86 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         logger.info(f"Found employee: {db_employee}")
 
         if not db_employee:
-            logger.warning(f"Employee with code {employee_code} not found for tenant {tenant_id}")
-            raise HTTPException(status_code=404, detail="Employee not found for this tenant.")
+            return JSONResponse(
+                    status_code=404,
+                    content={
+                        "status": "error",
+                        "code": 404,
+                        "message": "Employee not found for this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
 
-        # --------- Validate Department if provided ---------
+        # 2️⃣ Check duplicate employee_code (if updated)
+        if employee_update.employee_code and employee_update.employee_code != db_employee.employee_code:
+            existing_code = db.query(Employee).filter(
+                Employee.employee_code == employee_update.employee_code,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_code:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Employee code already exists for this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 3️⃣ Check duplicate email (if updated)
+        if employee_update.email and employee_update.email.strip().lower() != (db_employee.email or "").lower():
+            new_email = employee_update.email.strip().lower()
+            existing_email = db.query(Employee).filter(
+                Employee.email == new_email,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_email:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Email already exists for another employee in this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 4️⃣ Check duplicate mobile number (if updated)
+        if employee_update.mobile_number and employee_update.mobile_number != db_employee.mobile_number:
+            existing_mobile = db.query(Employee).filter(
+                Employee.mobile_number == employee_update.mobile_number,
+                Employee.tenant_id == tenant_id,
+                Employee.employee_id != db_employee.employee_id
+            ).first()
+            if existing_mobile:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Mobile number already exists for another employee in this tenant.",
+                        "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+                        "data": None
+                    }
+                )
+
+        # 2️⃣ Validate Department
         if employee_update.department_id is not None:
-            department = db.query(Department).filter_by(department_id=employee_update.department_id, tenant_id=tenant_id).first()
+            department = db.query(Department).filter_by(
+                department_id=employee_update.department_id,
+                tenant_id=tenant_id
+            ).first()
             if not department:
-                logger.error(f"Department {employee_update.department_id} not found for tenant {tenant_id}")
+                logger.error(f"[{request_id}] Invalid department_id={employee_update.department_id}")
                 raise HTTPException(status_code=404, detail="Department not found for this tenant.")
             db_employee.department_id = employee_update.department_id
+
 
         # --------- Validate Latitude & Longitude if provided ---------
         try:
@@ -1060,79 +1401,122 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
         except ValueError:
             logger.warning("Invalid latitude or longitude provided.")
             raise HTTPException(status_code=422, detail="Latitude and Longitude must be valid coordinates.")
+        # 4️⃣ Special Need Logic
+        special_need = employee_update.special_need.lower() if employee_update.special_need else None
+        start_date = employee_update.special_need_start_date
+        end_date = employee_update.special_need_end_date
 
-        # --------- Validate & Handle special_need logic ---------
-        if employee_update.special_need is not None:
-            special_need = employee_update.special_need.lower()
-            allowed_special_needs = ['pregnancy', 'others', 'none']
+        allowed_special_needs = ["pregnancy", "others", "none"]
+
+       # ✅ Case 1: special_need provided
+        if special_need:
             if special_need not in allowed_special_needs:
-                logger.warning(f"Invalid special_need: {employee_update.special_need}")
-                raise HTTPException(status_code=422, detail="Invalid special_need. Allowed: pregnancy, others, none.")
-
-            # Normalize "none" to None
-            if special_need == 'none':
+                logger.warning(f"[{request_id}] Invalid special_need={special_need}")
+                return EmployeeUpdateResponse(
+                    status="error",
+                    code=422,
+                    message=f"Invalid special_need. Allowed: {', '.join(allowed_special_needs)}",
+                    meta=Meta(
+                        request_id=request_id,
+                        timestamp=datetime.utcnow().isoformat()
+                    ),
+                    data=None
+                )
+            if start_date > end_date:
+                logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
+                return EmployeeUpdateResponse(
+                    status="error",
+                    code=422,
+                    message="special_need_start_date must be before special_need_end_date.",
+                    meta=Meta(
+                        request_id=request_id,
+                        timestamp=datetime.utcnow().isoformat()
+                    ),
+                    data=None
+                )
+            if special_need == "none":
+                # ❌ Dates should not be provided for 'none'
+                if start_date or end_date:
+                    logger.warning(f"[{request_id}] Dates provided with special_need=none")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="Do not provide dates when special_need is 'none'.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
                 db_employee.special_need = None
                 db_employee.special_need_start_date = None
                 db_employee.special_need_end_date = None
-
-                if employee_update.special_need_start_date or employee_update.special_need_end_date:
-                    logger.warning("Dates provided for special_need = 'none'")
-                    raise HTTPException(status_code=422, detail="Do not provide dates when special_need is 'none'.")
             else:
-                # Dates must be provided
-                if not employee_update.special_need_start_date or not employee_update.special_need_end_date:
-                    logger.warning("special_need requires both start and end dates.")
-                    raise HTTPException(status_code=422, detail="Start and end dates required for special_need.")
+                # ✅ Must have both dates
+                if not start_date or not end_date:
+                    logger.warning(f"[{request_id}] Missing dates for special_need={special_need}")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="Start and end dates are required when special_need is provided.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
 
-                if employee_update.special_need_start_date > employee_update.special_need_end_date:
-                    logger.warning("special_need_start_date is after end_date.")
-                    raise HTTPException(status_code=422, detail="special_need_start_date must be before end date.")
+                # ❌ Start date cannot be after end date
+                if start_date > end_date:
+                    logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
+                    return EmployeeUpdateResponse(
+                        status="error",
+                        code=422,
+                        message="special_need_start_date must be before special_need_end_date.",
+                        meta=Meta(
+                            request_id=request_id,
+                            timestamp=datetime.utcnow().isoformat()
+                        ),
+                        data=None
+                    )
 
                 db_employee.special_need = special_need
-                db_employee.special_need_start_date = employee_update.special_need_start_date
-                db_employee.special_need_end_date = employee_update.special_need_end_date
+                db_employee.special_need_start_date = start_date
+                db_employee.special_need_end_date = end_date
 
-        # --------- Update other fields if provided ---------
-        if employee_update.gender is not None:
-            db_employee.gender = employee_update.gender
+        # ✅ Case 2: No special_need, but dates provided → Error
+        elif start_date or end_date:
+            logger.warning(f"[{request_id}] Dates provided without special_need")
+            return EmployeeUpdateResponse(
+                status="error",
+                code=422,
+                message="Cannot provide special_need dates without specifying a special_need.",
+                meta=Meta(
+                    request_id=request_id,
+                    timestamp=datetime.utcnow().isoformat()
+                ),
+                data=None
+            )
 
-        if employee_update.mobile_number is not None:
-            db_employee.mobile_number = employee_update.mobile_number.strip()
-        if employee_update.name is not None:
-            db_employee.name = employee_update.name.strip()
+        # 5️⃣ Generic Field Updates (only provided ones)
+        updatable_fields = [
+            "employee_code", "gender", "name", "mobile_number", "alternate_mobile_number",
+            "office", "subscribe_via_email", "subscribe_via_sms", "address",
+            "latitude", "longitude", "landmark"
+        ]
+        for field in updatable_fields:
+            value = getattr(employee_update, field)
+            if value is not None:
+                setattr(db_employee, field, value.strip() if isinstance(value, str) else value)
 
-        if employee_update.alternate_mobile_number is not None:
-            db_employee.alternate_mobile_number = employee_update.alternate_mobile_number.strip()
-
-        if employee_update.office is not None:
-            db_employee.office = employee_update.office.strip()
-
-        if employee_update.subscribe_via_email is not None:
-            db_employee.subscribe_via_email = employee_update.subscribe_via_email
-
-        if employee_update.subscribe_via_sms is not None:
-            db_employee.subscribe_via_sms = employee_update.subscribe_via_sms
-
-        if employee_update.address is not None:
-            db_employee.address = employee_update.address
-
-        if employee_update.latitude is not None:
-            db_employee.latitude = employee_update.latitude
-
-        if employee_update.longitude is not None:
-            db_employee.longitude = employee_update.longitude
-
-        if employee_update.landmark is not None:
-            db_employee.landmark = employee_update.landmark
-
+        # 6️⃣ Commit changes
         db.commit()
         db.refresh(db_employee)
+        logger.info(f"[{request_id}] Employee updated successfully")
 
-        logger.info(f"Employee {employee_code} updated successfully for tenant {tenant_id}")
-        from app.firebase.employee_push import push_employee_to_firebase
-
-        # Push updated data to Firebase
+        # 7️⃣ Push to Firebase (non-blocking failure)
         try:
+            from app.firebase.employee_push import push_employee_to_firebase
             push_employee_to_firebase(
                 tenant_id=tenant_id,
                 department_id=db_employee.department_id,
@@ -1141,50 +1525,80 @@ def update_employee(db: Session, employee_code: str, employee_update, tenant_id:
                 name=db_employee.name
             )
         except Exception as e:
-            logger.error(f"Failed to update employee in Firebase: {str(e)}")
+            logger.error(f"[{request_id}] Firebase sync failed: {str(e)}")
 
+        # 8️⃣ Structured Response
         return {
-            "employee_code": db_employee.employee_code,
-            "department_id": db_employee.department_id,
-            "department_name": db_employee.department.department_name if db_employee.department else None,
-            "employee_id": db_employee.employee_id,
-            "name": db_employee.name,
-            "email": db_employee.email,
-            "gender": db_employee.gender,
-            "mobile_number": db_employee.mobile_number,
-            "alternate_mobile_number": db_employee.alternate_mobile_number,
-            "office": db_employee.office,
-            "special_need": db_employee.special_need,
-            "special_need_start_date": db_employee.special_need_start_date,
-            "special_need_end_date": db_employee.special_need_end_date,
-            "subscribe_via_email": db_employee.subscribe_via_email,
-            "subscribe_via_sms": db_employee.subscribe_via_sms,
-            "address": db_employee.address,
-            "latitude": db_employee.latitude,
-            "longitude": db_employee.longitude,
-            "landmark": db_employee.landmark,
+            "status": "success",
+            "code": 200,
+            "message": f"Employee {db_employee.employee_code} updated successfully",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {
+                "employee_code": db_employee.employee_code,
+                "employee_id": db_employee.employee_id,
+                "name": db_employee.name,
+                "email": db_employee.email,
+                "gender": db_employee.gender,
+                "mobile_number": db_employee.mobile_number,
+                "alternate_mobile_number": db_employee.alternate_mobile_number,
+                "office": db_employee.office,
+                "department_id": db_employee.department_id,
+                "department_name": db_employee.department.department_name if db_employee.department else None,
+                "special_need": db_employee.special_need,
+                "special_need_start_date": db_employee.special_need_start_date,
+                "special_need_end_date": db_employee.special_need_end_date,
+                "subscribe_via_email": db_employee.subscribe_via_email,
+                "subscribe_via_sms": db_employee.subscribe_via_sms,
+                "address": db_employee.address,
+                "latitude": db_employee.latitude,
+                "longitude": db_employee.longitude,
+                "landmark": db_employee.landmark,
+            }
         }
 
     except IntegrityError as e:
         db.rollback()
-        logger.error(f"IntegrityError while updating employee: {str(e.orig)}")
-        raise HTTPException(status_code=400, detail="Database integrity error while updating employee.")
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
+        return {
+            "status": "error",
+            "code": 400,
+            "message": "Database integrity error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"SQLAlchemyError while updating employee: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database error while updating employee.")
+        logger.error(f"[{request_id}] SQLAlchemyError: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Database error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except HTTPException as e:
         db.rollback()
-        logger.warning(f"HTTPException while updating employee: {str(e.detail)}")
-        raise e
+        logger.warning(f"[{request_id}] HTTPException while updating employee: {str(e.detail)}")
+        return {
+            "status": "error",
+            "code": e.status_code,
+            "message": str(e.detail),
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error while updating employee: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error while updating employee.")
-
+        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        return {
+            "status": "error",
+            "code": 500,
+            "message": "Unexpected error while updating employee.",
+            "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
+            "data": {}
+        }
 def delete_employee(db: Session, employee_code: str, tenant_id: int):
     try:
         logger.info(f"Delete request received for employee_code: {employee_code} in tenant_id: {tenant_id}")
