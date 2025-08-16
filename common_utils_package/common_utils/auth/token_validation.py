@@ -7,11 +7,26 @@ import json
 from cachetools import TTLCache
 from cachetools.keys import hashkey
 
-# Environment Variables
-OAUTH2_ENV = os.getenv("OAUTH2_ENV", "dev").strip()
-OAUTH2_URL = os.getenv("OAUTH2_URL", "http://127.0.0.1:8000/api/auth/introspect").strip()
-X_INTROSPECT_SECRET = os.getenv("X_Introspect_Secret","Testing_").strip()
+# # Environment Variables
+# OAUTH2_ENV = os.getenv("OAUTH2_ENV", "dev").strip()
+# OAUTH2_URL = os.getenv("OAUTH2_URL", "http://127.0.0.1:8000/api/auth/introspect").strip()
+# X_INTROSPECT_SECRET = os.getenv("X_Introspect_Secret","Testing_").strip()
+from dotenv import load_dotenv
 
+# load .env file
+load_dotenv()
+
+OAUTH2_ENV = os.getenv("OAUTH2_ENV", "dev").strip()
+
+if OAUTH2_ENV == "prod":
+    OAUTH2_URL = os.getenv("PROD_OAUTH2_URL").strip()
+else:
+    OAUTH2_URL = os.getenv("DEV_OAUTH2_URL").strip()
+
+X_INTROSPECT_SECRET = os.getenv("X_INTROSPECT_SECRET", "Testing_").strip()
+
+print(f"Running in {OAUTH2_ENV} mode")
+print(f"OAUTH2_URL = {OAUTH2_URL}")
 
 # Redis connection settings
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
