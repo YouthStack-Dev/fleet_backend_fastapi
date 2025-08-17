@@ -13,6 +13,6 @@ python-dotenv
 pandas
 openpyxl  # Needed for reading Excel files
 
-common_utils @ git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git@main#subdirectory=common_utils_package
+common_utils @ git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git@feat/jwt-enhancements#subdirectory=common_utils_package
 # pip install git+https://github.com/YouthStack-Dev/MLT_backend_fastapi.git#subdirectory=common_utils
 

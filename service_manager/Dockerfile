@@ -11,6 +11,8 @@ RUN apt-get update && \
     pip install --upgrade pip && \
     pip install -r requirements.txt
 
-EXPOSE 8002
+# Fix port inconsistency - use same port number for EXPOSE and CMD
+EXPOSE 8100
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
+# Default command with workers for better concurrency
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
