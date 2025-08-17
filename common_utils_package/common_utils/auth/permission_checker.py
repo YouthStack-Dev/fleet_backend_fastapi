@@ -15,7 +15,7 @@ class PermissionChecker:
         self.required_permissions = required_permissions
         self.check_tenant = check_tenant
     
-    async def __call__(self, request: Request, user_data = Depends(validate_bearer_token(use_cache=False))):
+    async def __call__(self, request: Request, user_data = Depends(validate_bearer_token(use_cache=True))):
         
         
         logger.info(f"PermissionChecker triggered for required_permissions: {self.required_permissions}")
