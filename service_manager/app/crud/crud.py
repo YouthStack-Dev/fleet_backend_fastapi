@@ -1360,7 +1360,8 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                         "data": None
                     }
                 )
-
+            # ✅ Update email if no duplicate found
+            db_employee.email = new_email
         # 4️⃣ Check duplicate mobile number (if updated)
         if employee_update.mobile_number and employee_update.mobile_number != db_employee.mobile_number:
             existing_mobile = db.query(Employee).filter(
