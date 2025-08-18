@@ -1423,20 +1423,9 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                     ),
                     data=None
                 )
-            if start_date > end_date:
-                logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
-                return EmployeeUpdateResponse(
-                    status="error",
-                    code=422,
-                    message="special_need_start_date must be before special_need_end_date.",
-                    meta=Meta(
-                        request_id=request_id,
-                        timestamp=datetime.utcnow().isoformat()
-                    ),
-                    data=None
-                )
+
+            # ❌ 'none' should not have any dates
             if special_need == "none":
-                # ❌ Dates should not be provided for 'none'
                 if start_date or end_date:
                     logger.warning(f"[{request_id}] Dates provided with special_need=none")
                     return EmployeeUpdateResponse(
@@ -1452,8 +1441,9 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                 db_employee.special_need = None
                 db_employee.special_need_start_date = None
                 db_employee.special_need_end_date = None
+
             else:
-                # ✅ Must have both dates
+                # ✅ Must provide both dates
                 if not start_date or not end_date:
                     logger.warning(f"[{request_id}] Missing dates for special_need={special_need}")
                     return EmployeeUpdateResponse(
@@ -1466,9 +1456,8 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                         ),
                         data=None
                     )
-
-                # ❌ Start date cannot be after end date
-                if start_date > end_date:
+                # ✅ Compare dates safely
+                if start_date and end_date and start_date > end_date:
                     logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
                     return EmployeeUpdateResponse(
                         status="error",
@@ -1498,6 +1487,7 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                 ),
                 data=None
             )
+
 
         # 5️⃣ Generic Field Updates (only provided ones)
         updatable_fields = [
