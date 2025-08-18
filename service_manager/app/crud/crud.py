@@ -1295,6 +1295,59 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     except Exception as e:
         logger.exception("Unhandled exception in get_employee_by_department")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+def get_employee_by_tenant(
+    db: Session, tenant_id: int, page: int = 1, limit: int = 50
+) -> EmployeesByTenantResponse:
+    try:
+        logger.info(f"Fetching employees for tenant_id={tenant_id}, page={page}, limit={limit}")
+
+        # Fetch all employees for the tenant with pagination
+        query = db.query(Employee).filter(Employee.tenant_id == tenant_id)
+        total_employees = query.count()
+
+        # Apply pagination
+        employees = query.offset((page - 1) * limit).limit(limit).all()
+
+        if not employees:
+            logger.warning(f"No employees found for tenant_id={tenant_id}")
+            raise HTTPException(status_code=404, detail="No employees found for this tenant.")
+
+        employee_list: List[EmployeeResponse] = []
+        for emp in employees:
+            employee_list.append(EmployeeResponse(
+                employee_code=emp.employee_code,
+                employee_id=emp.employee_id,
+                name=emp.name,
+                email=emp.email,
+                gender=emp.gender,
+                mobile_number=emp.mobile_number,
+                alternate_mobile_number=emp.alternate_mobile_number,
+                office=emp.office,
+                special_need=emp.special_need,
+                special_need_start_date=emp.special_need_start_date,
+                special_need_end_date=emp.special_need_end_date,
+                subscribe_via_email=emp.subscribe_via_email,
+                subscribe_via_sms=emp.subscribe_via_sms,
+                address=emp.address,
+                latitude=emp.latitude,
+                longitude=emp.longitude,
+                landmark=emp.landmark,
+                department_name=emp.department.department_name if emp.department else None,
+                department_id=emp.department_id
+            ))
+
+        return EmployeesByTenantResponse(
+            tenant_id=tenant_id,
+            total_employees=total_employees,
+            employees=employee_list
+        )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Unhandled exception in get_employees_by_tenant: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
     
 
 def update_employee(db: Session, employee_code: str, employee_update: EmployeeUpdate, tenant_id: int):

@@ -200,6 +200,12 @@ class EmployeesByDepartmentResponse(BaseModel):
     tenant_id: int
     total_employees: int
     employees: List[EmployeeResponse]
+
+class EmployeesByTenantResponse(BaseModel):
+    tenant_id: int
+    total_employees: int
+    employees: List[EmployeeResponse]
+
 class StatusUpdate(BaseModel):
     is_active: bool
 
