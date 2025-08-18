@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
@@ -31,6 +31,14 @@ async def get_employee(
     token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
 ):
     return controller.get_employee_by_department(department_id, db, token_data["tenant_id"])
+@router.get("/tenant", response_model=EmployeesByTenantResponse)
+async def get_employee(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number (starting from 1)"),
+    limit: int = Query(10, ge=1, le=100, description="Number of bookings per page"),
+    token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
+):
+    return controller.get_employee_by_tenant(db, token_data["tenant_id"], page, limit)
 
 @router.get("/{employee_code}", response_model=EmployeeRead)
 async def get_employee(
