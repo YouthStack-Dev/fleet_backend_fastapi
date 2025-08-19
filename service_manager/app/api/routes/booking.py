@@ -1,13 +1,14 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
 import logging
-from app.api.schemas.schemas import PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
+from app.api.schemas.schemas import ConfirmRouteRequest, PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
-from app.database.models import Booking, Shift
+from app.database.models import Booking, Shift, ShiftRoute
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 router = APIRouter(tags=["Admin Bookings"])
@@ -544,6 +545,87 @@ def suggest_routes(
             status="error",
             code=500,
             message="Unexpected error while generating route suggestions.",
+            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
+            data=None
+        )
+# @router.post("/admin/routes/confirm")
+# async def confirm_routes_debug(request: Request):
+#     raw = await request.body()
+#     print("RAW BODY:", raw)
+
+@router.post("/admin/routes/confirm", response_model=RouteSuggestionResponse)
+def confirm_routes(
+    payload: ConfirmRouteRequest,
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+
+    request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(f"[{request_id}] Confirming routes for shift_id={payload.shift_id}, date={payload.date}")
+
+    try:
+        # Validate date
+        filter_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
+        if filter_date < date.today():
+            raise HTTPException(status_code=400, detail="Date cannot be in the past")
+
+        # Fetch shift
+        shift = db.query(Shift).filter(
+            Shift.id == payload.shift_id,
+            Shift.tenant_id == tenant_id
+        ).first()
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+
+        # Optional: validate each booking exists
+        all_booking_ids = [b.booking_id for r in payload.routes for b in r.pickups]
+        bookings = db.query(Booking).filter(
+            Booking.booking_id.in_(all_booking_ids),
+            Booking.shift_id == payload.shift_id,
+            Booking.booking_date == filter_date
+        ).all()
+        if len(bookings) != len(all_booking_ids):
+            raise HTTPException(status_code=400, detail="Some bookings do not exist for this shift/date")
+
+        # Save routes
+        for route in payload.routes:
+            route_entry = ShiftRoute(
+                shift_id=payload.shift_id,
+                route_date=filter_date,
+                route_number=route.route_number,
+                route_data=jsonable_encoder(route),
+                confirmed=payload.confirmed
+            )
+            db.add(route_entry)
+        db.commit()
+
+        return RouteSuggestionResponse(
+            status="success",
+            code=200,
+            message="Routes confirmed successfully" if payload.confirmed else "Routes saved as draft",
+            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
+            data=None
+        )
+
+    except HTTPException as e:
+        db.rollback()
+        logger.warning(f"[{request_id}] HTTPException: {e.detail}")
+        return RouteSuggestionResponse(
+            status="error",
+            code=e.status_code,
+            message=str(e.detail),
+            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
+            data=None
+        )
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        return RouteSuggestionResponse(
+            status="error",
+            code=500,
+            message="Unexpected error while confirming routes",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
             data=None
         )
