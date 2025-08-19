@@ -1,61 +1,25 @@
 [
   {
     "employee": "alice.johnson@example.com",
-    "date": "2025-08-15",
+    "date": "2025-08-20",
     "shift_id": 1,
-    "status": 400,
+    "status": 200,
     "response": {
-      "detail": "Existing booking for 2025-08-15, not cancelled."
+      "detail": "Bookings created for all provided dates successfully"
     }
   },
   {
     "employee": "alice.johnson@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-22",
     "shift_id": 1,
-    "status": 400,
+    "status": 200,
     "response": {
-      "detail": "Existing booking for 2025-08-18, not cancelled."
+      "detail": "Bookings created for all provided dates successfully"
     }
   },
   {
     "employee": "alice.johnson@example.com",
-    "date": "2025-08-20",
-    "shift_id": 1,
-    "status": 400,
-    "response": {
-      "detail": "Existing booking for 2025-08-20, not cancelled."
-    }
-  },
-  {
-    "employee": "bob.smith@example.com",
-    "date": "2025-08-15",
-    "shift_id": 1,
-    "status": 400,
-    "response": {
-      "detail": "Existing booking for 2025-08-15, not cancelled."
-    }
-  },
-  {
-    "employee": "bob.smith@example.com",
-    "date": "2025-08-18",
-    "shift_id": 1,
-    "status": 400,
-    "response": {
-      "detail": "Existing booking for 2025-08-18, not cancelled."
-    }
-  },
-  {
-    "employee": "bob.smith@example.com",
-    "date": "2025-08-20",
-    "shift_id": 1,
-    "status": 400,
-    "response": {
-      "detail": "Existing booking for 2025-08-20, not cancelled."
-    }
-  },
-  {
-    "employee": "charlie.medson@example.com",
-    "date": "2025-08-15",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -63,8 +27,26 @@
     }
   },
   {
-    "employee": "charlie.medson@example.com",
-    "date": "2025-08-18",
+    "employee": "bob.smith@example.com",
+    "date": "2025-08-20",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "bob.smith@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "bob.smith@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -81,8 +63,17 @@
     }
   },
   {
-    "employee": "jake.fox@example.com",
-    "date": "2025-08-15",
+    "employee": "charlie.medson@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "charlie.medson@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -91,7 +82,7 @@
   },
   {
     "employee": "jake.fox@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -100,6 +91,24 @@
   },
   {
     "employee": "jake.fox@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "jake.fox@example.com",
+    "date": "2025-08-25",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "ben.cole@example.com",
     "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
@@ -109,7 +118,7 @@
   },
   {
     "employee": "ben.cole@example.com",
-    "date": "2025-08-15",
+    "date": "2025-08-22",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -118,34 +127,7 @@
   },
   {
     "employee": "ben.cole@example.com",
-    "date": "2025-08-18",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "ben.cole@example.com",
-    "date": "2025-08-20",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "max.ray@example.com",
-    "date": "2025-08-15",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "max.ray@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -162,8 +144,17 @@
     }
   },
   {
-    "employee": "leo.kent@example.com",
-    "date": "2025-08-15",
+    "employee": "max.ray@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "max.ray@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -172,7 +163,7 @@
   },
   {
     "employee": "leo.kent@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -181,6 +172,24 @@
   },
   {
     "employee": "leo.kent@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "leo.kent@example.com",
+    "date": "2025-08-25",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "sam.tate@example.com",
     "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
@@ -190,7 +199,7 @@
   },
   {
     "employee": "sam.tate@example.com",
-    "date": "2025-08-15",
+    "date": "2025-08-22",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -199,34 +208,7 @@
   },
   {
     "employee": "sam.tate@example.com",
-    "date": "2025-08-18",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "sam.tate@example.com",
-    "date": "2025-08-20",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "zoe.lane@example.com",
-    "date": "2025-08-15",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "zoe.lane@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -243,8 +225,17 @@
     }
   },
   {
-    "employee": "eva.moss@example.com",
-    "date": "2025-08-15",
+    "employee": "zoe.lane@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "zoe.lane@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -253,7 +244,7 @@
   },
   {
     "employee": "eva.moss@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -262,6 +253,24 @@
   },
   {
     "employee": "eva.moss@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "eva.moss@example.com",
+    "date": "2025-08-25",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "lian.hale@example.com",
     "date": "2025-08-20",
     "shift_id": 1,
     "status": 200,
@@ -271,7 +280,7 @@
   },
   {
     "employee": "lian.hale@example.com",
-    "date": "2025-08-15",
+    "date": "2025-08-22",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -280,34 +289,7 @@
   },
   {
     "employee": "lian.hale@example.com",
-    "date": "2025-08-18",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "lian.hale@example.com",
-    "date": "2025-08-20",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "noah.ried@example.com",
-    "date": "2025-08-15",
-    "shift_id": 1,
-    "status": 200,
-    "response": {
-      "detail": "Bookings created for all provided dates successfully"
-    }
-  },
-  {
-    "employee": "noah.ried@example.com",
-    "date": "2025-08-18",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -324,8 +306,8 @@
     }
   },
   {
-    "employee": "mia.wynn@example.com",
-    "date": "2025-08-15",
+    "employee": "noah.ried@example.com",
+    "date": "2025-08-22",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -333,8 +315,8 @@
     }
   },
   {
-    "employee": "mia.wynn@example.com",
-    "date": "2025-08-18",
+    "employee": "noah.ried@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -351,8 +333,8 @@
     }
   },
   {
-    "employee": "amy.shaw@example.com",
-    "date": "2025-08-15",
+    "employee": "mia.wynn@example.com",
+    "date": "2025-08-22",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -360,8 +342,35 @@
     }
   },
   {
-    "employee": "amy.shaw@example.com",
-    "date": "2025-08-18",
+    "employee": "mia.wynn@example.com",
+    "date": "2025-08-25",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "luke.cian@example.com",
+    "date": "2025-08-20",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "luke.cian@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "luke.cian@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
@@ -371,6 +380,24 @@
   {
     "employee": "amy.shaw@example.com",
     "date": "2025-08-20",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "amy.shaw@example.com",
+    "date": "2025-08-22",
+    "shift_id": 1,
+    "status": 200,
+    "response": {
+      "detail": "Bookings created for all provided dates successfully"
+    }
+  },
+  {
+    "employee": "amy.shaw@example.com",
+    "date": "2025-08-25",
     "shift_id": 1,
     "status": 200,
     "response": {
