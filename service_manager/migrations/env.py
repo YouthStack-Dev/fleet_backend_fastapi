@@ -5,13 +5,13 @@ from sqlalchemy import pool
 from app.database.database import Base  # Import your Base where models are defined
 from app.database.models import *  # noqa: F401
 from alembic import context
+import os
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-
-DATABASE_URL = "postgresql://maintainer:password@gocab.tech:5432/fleet"
+DATABASE_URL = os.getenv("DATABASE_URL")
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Interpret the config file for Python logging.

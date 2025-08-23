@@ -1,15 +1,4 @@
 services:
-  # db_servicemgr:
-  #   image: postgres:15
-  #   container_name: db_servicemgr
-  #   environment:
-  #     POSTGRES_DB: servicemgr_db
-  #     POSTGRES_USER: servicemgr_user
-  #     POSTGRES_PASSWORD: password
-  #   ports:
-  #     - "5433:5432"
-  #   volumes:
-  #     - servicemgr_data:/var/lib/postgresql/data
 
   redis_server:
     image: redis:latest
@@ -26,7 +15,6 @@ services:
     image: fleet_service_manager:latest
     container_name: service_manager
     environment:
-      # - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
       - DATABASE_URL=postgresql://maintainer:password@gocab.tech:5432/fleet
       - OAUTH2_ENV=dev
       - OAUTH2_URL=http://localhost:8100/api/auth/introspect
@@ -38,7 +26,6 @@ services:
       - TOKEN_EXPIRY_HOURS=1
       - X_INTROSPECT_SECRET=Kjs#idjXw
     depends_on:
-      # - db_servicemgr
       - redis_server
     ports:
       - "8100:8100"
