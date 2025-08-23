@@ -53,6 +53,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
         run: |
+          cd service_manager
           alembic upgrade head
           
       - name: Log in to Docker Hub
