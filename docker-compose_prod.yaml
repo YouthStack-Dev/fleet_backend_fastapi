@@ -14,6 +14,9 @@ services:
       context: ./service_manager
     image: dheerajkumarp/fleet_service_manager:latest
     container_name: service_manager
+    restart: always
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - DATABASE_URL=postgresql://maintainer:password@gocab.tech:5432/fleet
       - OAUTH2_ENV=dev
