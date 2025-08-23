@@ -35,7 +35,7 @@ services:
     volumes:
       - ./firebase_key.json:/app/secrets/firebase_key.json
 
-    # ✅ Internal container-to-container DB connection
+    # ✅ Internal container-to-container DB + Redis connection
     environment:
       - DATABASE_URL=postgresql://servicemgr_user:password@db_servicemgr:5432/servicemgr_db
       - OAUTH2_ENV=prod 
@@ -50,6 +50,7 @@ services:
 
     depends_on:
       - db_servicemgr
+      - redis_server
 
     ports:
       - "8100:8100"
@@ -57,3 +58,4 @@ services:
 
 volumes:
   servicemgr_data:
+  redis_data:

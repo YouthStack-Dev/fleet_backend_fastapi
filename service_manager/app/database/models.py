@@ -4,6 +4,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
 from app.database.database import Base, TimestampMixin
+from sqlalchemy.dialects.postgresql import JSONB
 
 # Association tables
 user_tenant = Table(
@@ -258,6 +259,8 @@ class Shift(Base):
     # Relationship to Tenant
     tenant = relationship("Tenant", back_populates="shifts")
     bookings = relationship("Booking", back_populates="shift")
+    shift_routes = relationship("ShiftRoute", back_populates="shift", cascade="all, delete-orphan")
+
 
 class Vendor(Base):
     __tablename__ = "vendors"
@@ -449,3 +452,18 @@ class Booking(Base, TimestampMixin):
     tenant = relationship("Tenant", back_populates="bookings")
     shift = relationship("Shift", back_populates="bookings")
     department = relationship("Department", back_populates="bookings")
+
+
+class ShiftRoute(Base):
+    __tablename__ = "shift_routes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=False)
+    route_date = Column(Date, nullable=False)
+    route_number = Column(Integer, nullable=False)
+    route_data = Column(JSONB, nullable=False)
+    confirmed = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    shift = relationship("Shift", back_populates="shift_routes")

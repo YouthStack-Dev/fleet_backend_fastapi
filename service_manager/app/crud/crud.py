@@ -1295,6 +1295,59 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
     except Exception as e:
         logger.exception("Unhandled exception in get_employee_by_department")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+def get_employee_by_tenant(
+    db: Session, tenant_id: int, page: int = 1, limit: int = 50
+) -> EmployeesByTenantResponse:
+    try:
+        logger.info(f"Fetching employees for tenant_id={tenant_id}, page={page}, limit={limit}")
+
+        # Fetch all employees for the tenant with pagination
+        query = db.query(Employee).filter(Employee.tenant_id == tenant_id)
+        total_employees = query.count()
+
+        # Apply pagination
+        employees = query.offset((page - 1) * limit).limit(limit).all()
+
+        if not employees:
+            logger.warning(f"No employees found for tenant_id={tenant_id}")
+            raise HTTPException(status_code=404, detail="No employees found for this tenant.")
+
+        employee_list: List[EmployeeResponse] = []
+        for emp in employees:
+            employee_list.append(EmployeeResponse(
+                employee_code=emp.employee_code,
+                employee_id=emp.employee_id,
+                name=emp.name,
+                email=emp.email,
+                gender=emp.gender,
+                mobile_number=emp.mobile_number,
+                alternate_mobile_number=emp.alternate_mobile_number,
+                office=emp.office,
+                special_need=emp.special_need,
+                special_need_start_date=emp.special_need_start_date,
+                special_need_end_date=emp.special_need_end_date,
+                subscribe_via_email=emp.subscribe_via_email,
+                subscribe_via_sms=emp.subscribe_via_sms,
+                address=emp.address,
+                latitude=emp.latitude,
+                longitude=emp.longitude,
+                landmark=emp.landmark,
+                department_name=emp.department.department_name if emp.department else None,
+                department_id=emp.department_id
+            ))
+
+        return EmployeesByTenantResponse(
+            tenant_id=tenant_id,
+            total_employees=total_employees,
+            employees=employee_list
+        )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"Unhandled exception in get_employees_by_tenant: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
     
 
 def update_employee(db: Session, employee_code: str, employee_update: EmployeeUpdate, tenant_id: int):
@@ -1360,7 +1413,8 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                         "data": None
                     }
                 )
-
+            # ✅ Update email if no duplicate found
+            db_employee.email = new_email
         # 4️⃣ Check duplicate mobile number (if updated)
         if employee_update.mobile_number and employee_update.mobile_number != db_employee.mobile_number:
             existing_mobile = db.query(Employee).filter(
@@ -1422,20 +1476,9 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                     ),
                     data=None
                 )
-            if start_date > end_date:
-                logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
-                return EmployeeUpdateResponse(
-                    status="error",
-                    code=422,
-                    message="special_need_start_date must be before special_need_end_date.",
-                    meta=Meta(
-                        request_id=request_id,
-                        timestamp=datetime.utcnow().isoformat()
-                    ),
-                    data=None
-                )
+
+            # ❌ 'none' should not have any dates
             if special_need == "none":
-                # ❌ Dates should not be provided for 'none'
                 if start_date or end_date:
                     logger.warning(f"[{request_id}] Dates provided with special_need=none")
                     return EmployeeUpdateResponse(
@@ -1451,8 +1494,9 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                 db_employee.special_need = None
                 db_employee.special_need_start_date = None
                 db_employee.special_need_end_date = None
+
             else:
-                # ✅ Must have both dates
+                # ✅ Must provide both dates
                 if not start_date or not end_date:
                     logger.warning(f"[{request_id}] Missing dates for special_need={special_need}")
                     return EmployeeUpdateResponse(
@@ -1465,9 +1509,8 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                         ),
                         data=None
                     )
-
-                # ❌ Start date cannot be after end date
-                if start_date > end_date:
+                # ✅ Compare dates safely
+                if start_date and end_date and start_date > end_date:
                     logger.warning(f"[{request_id}] Invalid date range for special_need={special_need}")
                     return EmployeeUpdateResponse(
                         status="error",
@@ -1497,6 +1540,7 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
                 ),
                 data=None
             )
+
 
         # 5️⃣ Generic Field Updates (only provided ones)
         updatable_fields = [

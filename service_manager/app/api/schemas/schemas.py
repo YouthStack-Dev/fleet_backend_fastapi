@@ -200,6 +200,12 @@ class EmployeesByDepartmentResponse(BaseModel):
     tenant_id: int
     total_employees: int
     employees: List[EmployeeResponse]
+
+class EmployeesByTenantResponse(BaseModel):
+    tenant_id: int
+    total_employees: int
+    employees: List[EmployeeResponse]
+
 class StatusUpdate(BaseModel):
     is_active: bool
 
@@ -782,3 +788,27 @@ class RouteSuggestionResponse(BaseModel):
 class RouteSuggestionRequest(BaseModel):
     shift_id: int
     date: str
+
+class ConfirmRoutePickup(BaseModel):
+    booking_id: Union[int, str]
+    latitude: float
+    longitude: float
+    address: str
+    landmark: Optional[str] = None
+    employee_name: Optional[str] = None
+
+class ConfirmRoute(BaseModel):
+    route_number: int
+    booking_ids: List[Union[int, str]]
+    pickups: List[ConfirmRoutePickup]
+    estimated_distance_km: float
+    estimated_duration_min: int
+    drop_lat: float
+    drop_lng: float
+    drop_address: str
+
+class ConfirmRouteRequest(BaseModel):
+    shift_id: int
+    date: str
+    routes: List[ConfirmRoute]
+    confirmed: bool  # true if admin confirms the route

@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees
+from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees,get_employee_by_tenant
 import traceback
 import logging
 
@@ -41,6 +41,13 @@ class EmployeeController:
     def get_employee_by_department(self, department_id, db, tenant_id):
         try:
             return get_employee_by_department(db, department_id, tenant_id)
+        except HTTPException as e:
+            raise e
+        except Exception:
+            raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching employee.")
+    def get_employee_by_tenant(self, db, tenant_id, page, limit):
+        try:
+            return get_employee_by_tenant(db, tenant_id, page, limit)
         except HTTPException as e:
             raise e
         except Exception:
