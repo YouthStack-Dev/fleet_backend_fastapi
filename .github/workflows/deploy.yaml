@@ -89,7 +89,7 @@ jobs:
             docker pull dheerajkumarp/fleet_service_manager:latest
 
             # # Run migrations before starting app
-            # docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
+            docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
 
             # Deploy new version
             docker compose -f ~/docker-compose_prod.yaml up -d --force-recreate
