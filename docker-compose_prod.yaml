@@ -16,6 +16,12 @@ services:
     container_name: service_manager
     restart: always
     command: uvicorn app.main:app --host 0.0.0.0 --port 8100
+    env_file:
+      - ./service.env
+
+    # ✅ Mount the firebase key JSON file inside the container
+    volumes:
+      - ./firebase_key.json:/app/secrets/firebase_key.json
     environment:
       - DATABASE_URL=postgresql://maintainer:password@gocab.tech:5432/fleet
       - OAUTH2_ENV=dev
