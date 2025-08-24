@@ -40,12 +40,6 @@ jobs:
             exit 1
           fi
 
-      - name: Run Alembic Migration
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
-        run: |
-          alembic upgrade head
-          
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -65,7 +59,7 @@ jobs:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml"
+          source: "docker-compose_prod.yaml"
           target: "~/"
 
       - name: SSH & deploy on VPS
@@ -86,12 +80,17 @@ jobs:
             EOF
 
             # Cleanup old resources
-            docker compose -f ~/docker-compose.prod.yml down --volumes --remove-orphans
+            docker compose -f ~/docker-compose_prod.yaml down --volumes --remove-orphans
             docker image prune -af
             docker volume prune -f
             docker network prune -f
 
-            # Deploy new version
+            # Pull latest image
             docker pull dheerajkumarp/fleet_service_manager:latest
-            docker compose -f ~/docker-compose.prod.yml up -d --force-recreate
+
+            # # Run migrations before starting app
+            docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
+
+            # Deploy new version
+            docker compose -f ~/docker-compose_prod.yaml up -d --force-recreate
             docker system prune -af
