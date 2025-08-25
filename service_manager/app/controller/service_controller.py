@@ -33,3 +33,6 @@ class ServiceController:
         if not deleted:
             raise HTTPException(status_code=404, detail="Service not found")
         return deleted
+
+    def seed_services(self, db: Session):
+        return crud.seed_services(db)

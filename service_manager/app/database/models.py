@@ -117,6 +117,7 @@ class Employee(Base, TimestampMixin):
     latitude = Column(String(50))
     longitude = Column(String(50))
     landmark = Column(String(255))
+    is_active = Column(Boolean, default=True)   # 👈 Add this
 
     tenant = relationship("Tenant", back_populates="employees")
     department = relationship("Department", back_populates="employees")

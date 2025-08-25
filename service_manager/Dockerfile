@@ -40,8 +40,8 @@ USER appuser
 EXPOSE 8100
 
 # Healthcheck (optional, for prod orchestrators)
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -f http://localhost:8100/health || exit 1
+# HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+#   CMD curl -f http://localhost:8100/health || exit 1
 
 # Start FastAPI app with Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]

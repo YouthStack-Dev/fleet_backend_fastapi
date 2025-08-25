@@ -68,6 +68,8 @@ class DepartmentWithCountResponse(BaseModel):
     department_name: str
     description: str
     employee_count: int
+    active_count: int
+    inactive_count: int
 
 class DepartmentRead(DepartmentBase):
     department_id: int

@@ -33,7 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create models
-    init_db()
+    # init_db()
     
     seed_data()
     yield

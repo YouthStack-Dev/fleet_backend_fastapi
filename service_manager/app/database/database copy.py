@@ -156,8 +156,7 @@ def seed_data():
                     address="Acme HQ, Tech Park",
                     longitude="77.4889504",
                     latitude="13.0690214",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Bob Smith",
@@ -178,8 +177,7 @@ def seed_data():
                     address="Startup Inc, Downtown",
                     longitude="77.5945665",
                     latitude="13.0674392",
-                    landmark="Opposite Metro Station",
-                    is_active=True
+                    landmark="Opposite Metro Station"
                 ),
                 Employee(
                     name="Charlie Medson",
@@ -200,8 +198,7 @@ def seed_data():
                     address="Med Solutions, Health Street",
                     longitude="77.5945665",
                     latitude="13.0674111",
-                    landmark="Near City Hospital",
-                    is_active=True
+                    landmark="Near City Hospital"
                 ),
                 Employee(
                     name="Jake Fox",
@@ -222,8 +219,7 @@ def seed_data():
                     address="3rd cross, 27th main road, 27th main, 1st Sector, HSR Layout, Bengaluru, Karnataka 560102",
                     latitude="12.919217",
                     longitude="77.651754",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                  Employee(
                     name="Ben Cole",
@@ -244,8 +240,7 @@ def seed_data():
                     address="2nd Cross, 1st main road, Soudamini Layout, Konanakunte, Bengaluru, Karnataka 560062",
                     latitude="12.8793",
                     longitude=" 77.5698",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                  Employee(
                     name="Max Ray",
@@ -266,8 +261,7 @@ def seed_data():
                     address="2nd Main Rd, opposite Varalakshmi Hospital, Madiwala New Extension, HSR layout Sector 2, 1st Stage, BTM Layout, Bengaluru, Karnataka 560068",
                     latitude="12.9247611",
                     longitude="77.6168886",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Leo Kent",
@@ -287,9 +281,8 @@ def seed_data():
                     subscribe_via_sms=False,
                     address="8th Cross Rd, 1st Sector, HSR Layout, Bengaluru,Karnataka,560102",
                     latitude="12.91731",
-                    longitude="77.64690",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    longitude=" 77.64690",
+                    landmark="Near Big Mall"
                 ),
                  Employee(
                     name="Sam Tate",
@@ -310,8 +303,7 @@ def seed_data():
                     address="1st Cross, Central Jail Road, Naganathapura, Hosa Road,South Bangalore, Karnataka - 560100",
                     latitude="12.874175",
                     longitude="77.667616",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Zoe Lane",
@@ -332,8 +324,7 @@ def seed_data():
                     address="Kada Agrahara, Sarjapur- Marathahalli Road",
                     latitude="13.081505",
                     longitude="77.695050",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Eva Moss",
@@ -354,8 +345,7 @@ def seed_data():
                     address="Bellandur Main Rd, Bellandur, Bengaluru, Karnataka 560103",
                     latitude="12.922696",
                     longitude="77.674283",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                  Employee(
                     name="Lian Hale",
@@ -376,8 +366,7 @@ def seed_data():
                     address="Bellandur Main Rd, Bellandur, Bengaluru, Karnataka 560103",
                     latitude="12.922696",
                     longitude="77.674283",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Noah Ried",
@@ -398,8 +387,7 @@ def seed_data():
                     address="Brigade Cornerstone Utopia apartments, Varthur-560087",
                     latitude="12.56041",
                     longitude="77.44381",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Mia Wynn",
@@ -420,8 +408,7 @@ def seed_data():
                     address="KT silk sarees manufacturers,Dommasandra, Bangalore, Thigala Chowdadenahalli,Karnataka 562125",
                     latitude="12.87807",
                     longitude="77.75428",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                 Employee(
                     name="Luke Cain",
@@ -442,8 +429,7 @@ def seed_data():
                     address="Ashirvad Colony, Horamavu- Bengaluru",
                     latitude="13.0273312",
                     longitude="77.6601508",
-                    landmark="Near Big Mall",
-                    is_active=True
+                    landmark="Near Big Mall"
                 ),
                  Employee(
                     name="Amy Shaw",
@@ -464,9 +450,8 @@ def seed_data():
                     address="Heelalige, gate, Chandapura, Bengaluru, Karnataka 560099",
                     latitude="12.80044",
                     longitude="77.70628",
-                    landmark="Near Big Mall",
-                    is_active=True
-                ),
+                    landmark="Near Big Mall"
+                ),      
             ]
 
             session.add_all(SEED_employees)
