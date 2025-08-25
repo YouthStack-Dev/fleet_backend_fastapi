@@ -320,7 +320,7 @@ class Vehicle(Base):
     vehicle_code = Column(String, nullable=False, unique=True, comment="App-managed vehicle code")
     reg_number = Column(String, nullable=False, unique=True, comment="Physical vehicle registration number")
 
-    status = Column(String, nullable=False, default="ACTIVE", comment="Vehicle status like ACTIVE, INACTIVE, MAINTENANCE")
+    status = Column(Boolean, nullable=False, default=True, comment="Vehicle status - True: Active, False: Inactive")
 
     rc_card_url = Column(String, nullable=True, comment="URL to RC card document")
     rc_expiry_date = Column(Date, nullable=True, comment="RC card expiry date")

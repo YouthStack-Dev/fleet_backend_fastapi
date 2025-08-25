@@ -110,7 +110,7 @@ async def create_vehicle(
     vehicle_code: str = Form(...),
     reg_number: str = Form(...),
     vehicle_type_id: int = Form(...),
-    status: str = Form(...),
+    status: bool = Form(...),
     description: Optional[str] = Form(None),
 
     driver_id: Optional[int] = Form(None),
@@ -148,8 +148,7 @@ async def create_vehicle(
         if db.query(Vehicle).filter_by(reg_number=reg_number.strip(), vendor_id=vendor_id).first():
             raise HTTPException(status_code=409, detail="Registration number already exists.")
 
-        if status.strip().upper() not in {"ACTIVE", "INACTIVE"}:
-            raise HTTPException(status_code=400, detail="Invalid status value.")
+
         # Check if driver is already assigned to another vehicle
         if driver_id is not None:
             existing_assignment = db.query(Vehicle).filter_by(driver_id=driver_id).first()
@@ -180,7 +179,7 @@ async def create_vehicle(
             reg_number=reg_number.strip(),
             vehicle_type_id=vehicle_type_id,
             driver_id=driver_id,
-            status=status.strip(),
+            status=status,
             description=description,
 
             rc_card_url=rc_card_url,
@@ -245,7 +244,7 @@ async def update_vehicle(
     vehicle_code: str = Form(...),
     reg_number: str = Form(...),
     vehicle_type_id: int = Form(...),
-    status: str = Form(...),
+    status: bool = Form(...),
     description: Optional[str] = Form(None),
 
     driver_id: Optional[int] = Form(None),
@@ -299,8 +298,6 @@ async def update_vehicle(
         ):
             raise HTTPException(status_code=409, detail="Registration number already exists.")
 
-        if status.strip().upper() not in {"ACTIVE", "INACTIVE"}:
-            raise HTTPException(status_code=400, detail="Invalid status value.")
 
         # Driver assignment check
         if driver_id is not None:
@@ -327,7 +324,7 @@ async def update_vehicle(
         vehicle.reg_number = reg_number.strip()
         vehicle.vehicle_type_id = vehicle_type_id
         vehicle.driver_id = driver_id
-        vehicle.status = status.strip()
+        vehicle.status = status
         vehicle.description = description
 
         vehicle.rc_expiry_date = rc_expiry_date
@@ -386,6 +383,7 @@ async def update_vehicle(
         db.rollback()
         logger.exception("Unhandled error in vehicle update: %s", str(e))
         raise HTTPException(status_code=500, detail="Unexpected error while updating vehicle.")
+from sqlalchemy.orm import joinedload
 
 @router.get("/vehicles/", response_model=List[VehicleOut])
 def get_vehicles(
@@ -394,7 +392,7 @@ def get_vehicles(
     vehicle_id: Optional[int] = Query(None),
     vehicle_code: Optional[str] = Query(None),
     vehicle_type_id: Optional[int] = Query(None),
-    status: Optional[str] = Query(None),  # ACTIVE / INACTIVE
+    status: Optional[bool] = Query(None),
 
     limit: int = Query(10, ge=1),
     offset: int = Query(0, ge=0),
@@ -405,52 +403,82 @@ def get_vehicles(
     tenant_id = token_data.get("tenant_id")
 
     try:
-        logger.info("Fetching vehicles with filters: "
-                    f"tenant_id={tenant_id}, vendor_id={vendor_id}, driver_id={driver_id}, "
-                    f"vehicle_id={vehicle_id}, vehicle_code={vehicle_code}, vehicle_type_id={vehicle_type_id}, "
-                    f"status={status}, limit={limit}, offset={offset}")
+        logger.info("Fetching vehicles with filters")
 
-        query = db.query(Vehicle).join(Vendor).filter(Vendor.tenant_id == tenant_id)
+        query = (
+            db.query(Vehicle)
+            .join(Vendor)
+            .filter(Vendor.tenant_id == tenant_id)
+            .options(
+                joinedload(Vehicle.vendor),
+                joinedload(Vehicle.driver),
+                joinedload(Vehicle.vehicle_type),
+            )
+        )
 
         # Apply filters
         if vendor_id is not None:
             query = query.filter(Vehicle.vendor_id == vendor_id)
-
         if driver_id is not None:
             query = query.filter(Vehicle.driver_id == driver_id)
-
         if vehicle_id is not None:
             query = query.filter(Vehicle.vehicle_id == vehicle_id)
-
         if vehicle_code is not None:
             query = query.filter(Vehicle.vehicle_code.ilike(f"%{vehicle_code.strip()}%"))
-
         if vehicle_type_id is not None:
             query = query.filter(Vehicle.vehicle_type_id == vehicle_type_id)
-
-        if status:
-            query = query.filter(func.lower(Vehicle.status) == status.strip().lower())
-
+        if status is not None:
+            query = query.filter(Vehicle.status == status)
 
         total = query.count()
         vehicles = query.offset(offset).limit(limit).all()
 
         if not vehicles:
-            logger.warning("No vehicles found for given filters.")
-            raise HTTPException(status_code=404, detail="No vehicles found for the given filters.")     
-           
-        logger.info(f"Found {len(vehicles)} of {total} total vehicles matching filters.")
-        return vehicles
-    except HTTPException as e:
-        logger.warning(f"HTTPException: {e.detail}")
-        raise e  # DO NOT LOG AGAIN IN GENERAL EXCEPTION
-    
-    except SQLAlchemyError as e:
-        logger.error(f"SQLAlchemyError while fetching vehicles: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database error while fetching vehicles.")
+            logger.warning("No vehicles found")
+            raise HTTPException(status_code=404, detail="No vehicles found")
 
+        logger.info(f"Found {len(vehicles)} vehicles out of {total}")
+        
+        # Transform into response with extra fields
+        result = []
+        for v in vehicles:
+            result.append(VehicleOut(
+                vehicle_id=v.vehicle_id,
+                vendor_id=v.vendor_id,
+                vehicle_code=v.vehicle_code,
+                reg_number=v.reg_number,
+                vehicle_type_id=v.vehicle_type_id,
+                driver_id=v.driver_id,
+                status=v.status,
+                description=v.description,
+                rc_expiry_date=v.rc_expiry_date,
+                insurance_expiry_date=v.insurance_expiry_date,
+                permit_expiry_date=v.permit_expiry_date,
+                pollution_expiry_date=v.pollution_expiry_date,
+                fitness_expiry_date=v.fitness_expiry_date,
+                tax_receipt_date=v.tax_receipt_date,
+                rc_card_url=v.rc_card_url,
+                insurance_url=v.insurance_url,
+                permit_url=v.permit_url,
+                pollution_url=v.pollution_url,
+                fitness_url=v.fitness_url,
+                tax_receipt_url=v.tax_receipt_url,
+                vehicle_type_name=v.vehicle_type.name if v.vehicle_type else None,
+                vendor_name=v.vendor.vendor_name if v.vendor else None,
+                driver_name=v.driver.name if v.driver else None,
+                contract_type=v.contract_type if hasattr(v, "contract_type") else None,
+                garage_name=None
+            ))
+        
+        return result
+
+    except HTTPException as e:
+        raise e
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while fetching vehicles.")
     except Exception as e:
-        logger.exception("Unhandled error while fetching vehicles")
+        logger.exception("Unhandled error")
         raise HTTPException(status_code=500, detail="Unexpected error while fetching vehicles.")
 
 from fastapi.responses import JSONResponse
