@@ -662,7 +662,7 @@ class VehicleOut(BaseModel):
     reg_number: str
     vehicle_type_id: int
     driver_id: Optional[int]
-    status: str
+    status: bool
     description: Optional[str]
     rc_expiry_date: Optional[date]
     insurance_expiry_date: Optional[date]
@@ -678,6 +678,15 @@ class VehicleOut(BaseModel):
     fitness_url: Optional[str]
     tax_receipt_url: Optional[str]
 
+    # Extra fields
+    vehicle_type_name: Optional[str]
+    vendor_name: Optional[str]
+    driver_name: Optional[str]
+    contract_type: Optional[str]
+    garage_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class EmployeeLoginResponse(BaseModel):
     access_token: str
