@@ -858,3 +858,58 @@ class UpdateRouteRequest(BaseModel):
     shift_id: int
     date: str  # "YYYY-MM-DD"
     routes: List[UpdateRouteItem]
+
+class AssignVendorRouteItem(BaseModel):
+    route_number: int
+    vendor_id: int
+    driver_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+
+class AssignVendorRequest(BaseModel):
+    shift_id: int
+    date: date
+    routes: List[AssignVendorRouteItem]
+
+
+
+class VendorRouteSuggestion(BaseModel):
+    route_number: int
+    booking_ids: List[str]
+    pickups: List[PickupDetail]
+    estimated_distance_km: float
+    estimated_duration_min: int
+    drop_lat: float
+    drop_lng: float
+    drop_address: str
+
+
+class VendorRouteSuggestionData(BaseModel):
+    shift_id: int
+    shift_code: str
+    date: date
+    total_routes: int
+    routes: List[VendorRouteSuggestion]
+
+
+class VendorRouteSuggestionResponse(BaseModel):
+    status: Literal["success", "error"]
+    code: int
+    message: str
+    meta: Dict[str, Any]
+    data: Optional[VendorRouteSuggestionData]
+
+
+# -------------------------
+# Vendor assignment specific
+# -------------------------
+class VendorAssignedRoute(BaseModel):
+    route_id: int
+    vendor_id: int
+
+
+class VendorAssignResponse(BaseModel):
+    status: Literal["success", "error"]
+    code: int
+    message: str
+    meta: Dict[str, Any]
+    data: List[VendorAssignedRoute]
