@@ -1009,3 +1009,118 @@ def confirm_routes(
         logger.exception(f"[{request_id}] Unexpected error")
         return RouteSuggestionResponse(status="error", code=500, message="Unexpected error while confirming routes",
                                        meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
+from math import ceil
+
+
+@router.get("/admin/routes/", response_model=RouteSuggestionResponse)
+def get_routes(
+    shift_id: int = Query(..., description="Filter by shift ID"),
+    route_number: Optional[int] = Query(None, description="Filter by route number"),
+    route_date: date = Query(..., description="Filter by route date in YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of routes per page"),
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Get confirmed routes with all booking details.
+    Required: shift_id, route_date.
+    Optional: route_number. Supports pagination.
+    """
+    request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(
+        f"[{request_id}] Fetching routes: tenant_id={tenant_id}, shift_id={shift_id}, "
+        f"route_number={route_number}, route_date={route_date}, page={page}, page_size={page_size}"
+    )
+
+    try:
+        # Validate tenant and shift
+        shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found for this tenant")
+
+        # Base query
+        query = db.query(ShiftRoute).filter(
+            ShiftRoute.shift_id == shift_id,
+            ShiftRoute.status == RouteStatus.CONFIRMED,
+            ShiftRoute.route_date == route_date
+        )
+
+        if route_number:
+            query = query.filter(ShiftRoute.route_number == route_number)
+
+        # Pagination
+        total_routes = query.count()
+        total_pages = ceil(total_routes / page_size) if total_routes else 1
+        offset = (page - 1) * page_size
+
+        routes: List[ShiftRoute] = query.order_by(
+            ShiftRoute.route_date.desc(),
+            ShiftRoute.route_number.asc()
+        ).offset(offset).limit(page_size).all()
+
+        response_routes: List[RouteSuggestion] = []
+
+        for route in routes:
+            stops = db.query(ShiftRouteStop).filter(
+                ShiftRouteStop.shift_route_id == route.id
+            ).order_by(ShiftRouteStop.position).all()
+
+            pickups = []
+            booking_ids = []
+
+            for s in stops:
+                booking_ids.append(str(s.booking_id))
+                pickups.append(
+                    PickupDetail(
+                        booking_id=str(s.booking_id),
+                        employee_name=s.employee_name,
+                        latitude=s.pickup_lat,
+                        longitude=s.pickup_lng,
+                        address=s.pickup_address,
+                        landmark=s.landmark
+                    )
+                )
+
+            route_data = route.route_data or {}
+            response_routes.append(
+                RouteSuggestion(
+                    route_number=route.route_number,
+                    booking_ids=booking_ids,
+                    pickups=pickups,
+                    estimated_distance_km=route_data.get("estimated_distance_km", 0.0),
+                    estimated_duration_min=route_data.get("estimated_duration_min", 0),
+                    drop_lat=route_data.get("drop_lat", 0.0),
+                    drop_lng=route_data.get("drop_lng", 0.0),
+                    drop_address=route_data.get("drop_address", "Office")
+                )
+            )
+
+        return RouteSuggestionResponse(
+            status="success",
+            code=200,
+            message=f"Fetched {len(response_routes)} routes (page {page}/{total_pages})",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat(),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_routes": total_routes
+            },
+            data=RouteSuggestionData(
+                shift_id=shift.id,
+                shift_code=shift.shift_code,  # Always use valid shift_code from shift
+                date=route_date,
+                total_routes=len(response_routes),
+                routes=response_routes
+            )
+        )
+
+    except HTTPException as e:
+        logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
+        raise
+    except Exception as e:
+        logger.exception(f"[{request_id}] Failed to fetch routes")
+        raise HTTPException(status_code=500, detail="Error fetching routes")
