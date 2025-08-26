@@ -1,7 +1,10 @@
+import json
 from dotenv import load_dotenv
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 load_dotenv()  # It will load .env file values into os.environ
+# Add this import at the top of main.py
+from starlette.status import HTTP_415_UNSUPPORTED_MEDIA_TYPE
 
 from typing import Union
 from fastapi import FastAPI
@@ -30,7 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create models
-    init_db()
+    # init_db()
     
     seed_data()
     yield
@@ -76,11 +79,38 @@ class RequestLoggerMiddleware(BaseHTTPMiddleware):
     
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error(f"Validation error: {exc.errors()} | body: {exc.body}")
+    # Safely decode request body
+    body = None
+    if isinstance(exc.body, (bytes, bytearray)):
+        try:
+            body = exc.body.decode("utf-8")
+        except Exception:
+            body = str(exc.body)
+    else:
+        body = exc.body
+
+    # Build structured log
+    log_data = {
+        "type": "validation_error",
+        "method": request.method,
+        "url": str(request.url),
+        "query_params": dict(request.query_params),
+        "body": body,
+        "errors": exc.errors()
+    }
+
+    # Log as JSON string (so it’s easy for ELK/Splunk/Sentry to parse)
+    logger.error(json.dumps(log_data, default=str))
+
+    # Return standard response
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content={
+            "detail": exc.errors(),
+            "message": "Request validation failed"
+        }
     )
+
 import os
 from fastapi.staticfiles import StaticFiles
 # Local path inside container

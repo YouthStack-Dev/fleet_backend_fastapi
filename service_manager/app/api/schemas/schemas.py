@@ -68,6 +68,8 @@ class DepartmentWithCountResponse(BaseModel):
     department_name: str
     description: str
     employee_count: int
+    active_count: int
+    inactive_count: int
 
 class DepartmentRead(DepartmentBase):
     department_id: int
@@ -660,7 +662,7 @@ class VehicleOut(BaseModel):
     reg_number: str
     vehicle_type_id: int
     driver_id: Optional[int]
-    status: str
+    status: bool
     description: Optional[str]
     rc_expiry_date: Optional[date]
     insurance_expiry_date: Optional[date]
@@ -676,6 +678,15 @@ class VehicleOut(BaseModel):
     fitness_url: Optional[str]
     tax_receipt_url: Optional[str]
 
+    # Extra fields
+    vehicle_type_name: Optional[str]
+    vendor_name: Optional[str]
+    driver_name: Optional[str]
+    contract_type: Optional[str]
+    garage_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class EmployeeLoginResponse(BaseModel):
     access_token: str
@@ -788,3 +799,27 @@ class RouteSuggestionResponse(BaseModel):
 class RouteSuggestionRequest(BaseModel):
     shift_id: int
     date: str
+
+class ConfirmRoutePickup(BaseModel):
+    booking_id: Union[int, str]
+    latitude: float
+    longitude: float
+    address: str
+    landmark: Optional[str] = None
+    employee_name: Optional[str] = None
+
+class ConfirmRoute(BaseModel):
+    route_number: int
+    booking_ids: List[Union[int, str]]
+    pickups: List[ConfirmRoutePickup]
+    estimated_distance_km: float
+    estimated_duration_min: int
+    drop_lat: float
+    drop_lng: float
+    drop_address: str
+
+class ConfirmRouteRequest(BaseModel):
+    shift_id: int
+    date: str
+    routes: List[ConfirmRoute]
+    confirmed: bool  # true if admin confirms the route

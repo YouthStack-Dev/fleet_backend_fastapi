@@ -4,7 +4,7 @@ from app.database.database import get_db
 from app.api.schemas.schemas import ServiceCreate, ServiceRead
 from app.controller.service_controller import ServiceController
 from common_utils.auth.permission_checker import PermissionChecker
-
+from typing import List
 router = APIRouter()
 service_controller = ServiceController()
 
@@ -74,5 +74,15 @@ async def delete_service(
 ):
     try:
         return service_controller.delete_service(service_id, db)
+    except HTTPException as e:
+        raise e
+    
+@router.post("/seed", response_model=list[ServiceRead])
+async def seed_services(
+    db: Session = Depends(get_db),
+    # token_data: dict = Depends(PermissionChecker(["service_management.create"]))
+):
+    try:
+        return service_controller.seed_services(db)
     except HTTPException as e:
         raise e

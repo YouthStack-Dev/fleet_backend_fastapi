@@ -164,6 +164,38 @@ def create_service(db: Session, service: ServiceCreate):
     except Exception as e:
         db.rollback()
         raise handle_integrity_error(e)
+    
+def seed_services(db: Session):
+    try:
+        default_services = [
+            {"name": "User Management", "description": "Manage users, roles, and permissions"},
+            {"name": "Shift Management", "description": "Manage employee shifts and logs"},
+            {"name": "Booking Management", "description": "Manage bookings and assignments"},
+            {"name": "Driver Management", "description": "Manage drivers and their documents"},
+            {"name": "Vehicle Management", "description": "Manage vehicles and maintenance"},
+        ]
+
+        created_services = []
+        for service_data in default_services:
+            # check if exists
+            existing = db.query(Service).filter(Service.name == service_data["name"]).first()
+            if not existing:
+                new_service = Service(
+                    name=service_data["name"],
+                    description=service_data["description"],
+                    service_metadata={}
+                )
+                db.add(new_service)
+                created_services.append(new_service)
+
+        db.commit()
+        for s in created_services:
+            db.refresh(s)
+
+        return created_services
+    except Exception as e:
+        db.rollback()
+        raise handle_integrity_error(e)
 
 def get_service(db: Session, service_id: int):
     return db.query(Service).filter(Service.id == service_id).first()
@@ -658,16 +690,33 @@ def get_departments(db, tenant_id: int, skip: int = 0, limit: int = 100):
 
         department_list = []
         for department in departments:
+            # Total employees in department
             employee_count = db.query(Employee).filter(
                 Employee.department_id == department.department_id,
                 Employee.tenant_id == tenant_id
+            ).count()
+
+            # Active employees in department
+            active_count = db.query(Employee).filter(
+                Employee.department_id == department.department_id,
+                Employee.tenant_id == tenant_id,
+                Employee.is_active == True
+            ).count()
+
+            # Inactive employees in department
+            inactive_count = db.query(Employee).filter(
+                Employee.department_id == department.department_id,
+                Employee.tenant_id == tenant_id,
+                Employee.is_active == False
             ).count()
 
             department_list.append({
                 "department_id": department.department_id,
                 "department_name": department.department_name,
                 "description": department.description,
-                "employee_count": employee_count
+                "employee_count": employee_count,
+                "active_count": active_count,
+                "inactive_count": inactive_count,
             })
 
         logger.info(f"Found {len(department_list)} departments for tenant {tenant_id}")
