@@ -874,6 +874,7 @@ class AssignVendorRequest(BaseModel):
 
 class VendorRouteSuggestion(BaseModel):
     route_number: int
+    vendor_id: int
     booking_ids: List[str]
     pickups: List[PickupDetail]
     estimated_distance_km: float
