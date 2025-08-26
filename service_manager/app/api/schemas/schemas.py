@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, constr, validator
 from typing import Any, List, Optional, Dict, Union
 from datetime import date, datetime ,time
 from typing_extensions import Literal
@@ -800,26 +800,49 @@ class RouteSuggestionRequest(BaseModel):
     shift_id: int
     date: str
 
-class ConfirmRoutePickup(BaseModel):
-    booking_id: Union[int, str]
+# ---- Reuse your existing suggestion models ----
+class PickupDetail(BaseModel):
+    booking_id: str
+    employee_name: Optional[str]
     latitude: float
     longitude: float
-    address: str
+    address: Optional[str] = None
     landmark: Optional[str] = None
-    employee_name: Optional[str] = None
 
-class ConfirmRoute(BaseModel):
+class RouteSuggestion(BaseModel):
     route_number: int
-    booking_ids: List[Union[int, str]]
-    pickups: List[ConfirmRoutePickup]
+    booking_ids: List[str]
+    pickups: List[PickupDetail]
     estimated_distance_km: float
     estimated_duration_min: int
     drop_lat: float
     drop_lng: float
     drop_address: str
 
+class RouteSuggestionData(BaseModel):
+    shift_id: int
+    shift_code: str
+    date: date
+    total_routes: int
+    routes: List[RouteSuggestion]
+
+class RouteSuggestionResponse(BaseModel):
+    status: Literal["success","error"]
+    code: int
+    message: str
+    meta: Dict[str, Any]
+    data: Optional[RouteSuggestionData]
+
+# ---- New confirm request (FE sends only group/order/overrides) ----
+class ConfirmRouteItem(BaseModel):
+    # route_number: int
+    booking_ids: List[Union[int, str]]           # ordered list (admin order). If you want BE to optimize, send unordered + flag below
+    optimize: bool = False                        # if True, BE may reorder via Google
+    drop_lat: Optional[float] = None              # allow per-route override
+    drop_lng: Optional[float] = None
+    drop_address: Optional[str] = None
+
 class ConfirmRouteRequest(BaseModel):
     shift_id: int
-    date: str
-    routes: List[ConfirmRoute]
-    confirmed: bool  # true if admin confirms the route
+    date: date
+    routes: List[ConfirmRouteItem]

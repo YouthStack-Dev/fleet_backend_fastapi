@@ -11,7 +11,7 @@ import os
 # access to the values within the .ini file in use.
 config = context.config
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5433/fleet")
+DATABASE_URL = os.getenv("DATABASE_URL")
 print(DATABASE_URL)
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 

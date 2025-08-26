@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 import logging
 from app.api.schemas.schemas import ConfirmRouteRequest, PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
-from app.database.models import Booking, Shift, ShiftRoute
+from app.database.models import Booking, BookingStatus, RouteStatus, Shift, ShiftRoute, ShiftRouteStop
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 router = APIRouter(tags=["Admin Bookings"])
@@ -131,8 +132,6 @@ from app.database.models import Shift, Booking
 from app.api.schemas.schemas import ShiftsByDateResponse, BookingOut
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
-
-logger = logging.getLogger(__name__)
 
 @router.get("/admin/shift-bookings/")
 def get_shift_bookings_by_date(
@@ -625,7 +624,6 @@ def _build_google_route(group: List, drop_lat: float, drop_lng: float, api_key: 
     return ordered, total_distance_km, total_duration_min
 
 # ---- Endpoint ----
-
 @router.post("/admin/routes/suggest", response_model=RouteSuggestionResponse)
 def suggest_routes(
     payload: RouteSuggestionRequest,
@@ -634,12 +632,12 @@ def suggest_routes(
 ):
     """
     Admin endpoint to suggest optimized routes for a shift on a specific date.
-    Does not assign drivers — generates a draft arrangement only.
+    Generates draft optimized routes for unconfirmed bookings only.
     """
     request_id = str(uuid.uuid4())
     tenant_id = token_data.get("tenant_id")
     logger.info(
-        f"[{request_id}] RouteSuggest init tenant_id={tenant_id}, shift_id={payload.shift_id}, date={payload.date}, "
+        f"[{request_id}] RouteSuggest init: tenant_id={tenant_id}, shift_id={payload.shift_id}, date={payload.date}, "
         f"capacity={CAR_CAPACITY}, radius_km={MAX_RADIUS_KM}, sklearn={_SKLEARN_AVAILABLE}"
     )
 
@@ -675,47 +673,62 @@ def suggest_routes(
         if not bookings:
             raise HTTPException(status_code=404, detail="No bookings found for this shift and date")
 
-        # Filter out bookings without valid pickup coordinates
-        valid_bookings = []
-        dropped = 0
-        for b in bookings:
-            if _validate_coord(getattr(b, "pickup_location_latitude", None)) and \
-               _validate_coord(getattr(b, "pickup_location_longitude", None)):
-                valid_bookings.append(b)
-            else:
-                dropped += 1
-        if dropped:
-            logger.warning(f"[{request_id}] Dropped {dropped} bookings with invalid/missing pickup coords")
+        # Get all confirmed booking IDs for this shift/date
+        confirmed_booking_ids = {
+            str(bid) for (bid,) in db.query(ShiftRouteStop.booking_id)
+            .join(ShiftRoute, ShiftRouteStop.shift_route_id == ShiftRoute.id)
+            .filter(
+                ShiftRoute.shift_id == payload.shift_id,
+                ShiftRoute.route_date == filter_date,
+                ShiftRoute.status == RouteStatus.CONFIRMED
+            ).all()
+        }
+        logger.info(f"[{request_id}] Confirmed booking_ids excluded: {confirmed_booking_ids}")
+
+        # Filter out confirmed bookings & invalid coords
+        valid_bookings: List[Booking] = [
+            b for b in bookings
+            if str(b.booking_id) not in confirmed_booking_ids
+            and _validate_coord(getattr(b, "pickup_location_latitude", None))
+            and _validate_coord(getattr(b, "pickup_location_longitude", None))
+        ]
+        logger.info(f"[{request_id}] Valid bookings for clustering: {[b.booking_id for b in valid_bookings]}")
 
         if not valid_bookings:
-            raise HTTPException(status_code=400, detail="All bookings have invalid pickup coordinates")
+            raise HTTPException(status_code=400, detail="No valid bookings available for route suggestion")
 
-        # ----- Cluster + smart split (radius-aware, capacity-aware) -----
+        # Cluster + smart split
         grouped_bookings: List[List[Booking]] = _cluster_bookings(
             valid_bookings, CAR_CAPACITY, MAX_RADIUS_KM, logger
         )
         logger.info(f"[{request_id}] Clustering complete: groups={len(grouped_bookings)}")
 
-        # ----- Build Google routes for each group -----
+        # Build Google routes per group
         suggested_routes: List[RouteSuggestion] = []
         route_idx = 1
         for group in grouped_bookings:
+            # Remove duplicates inside the group
+            unique_group_map = {str(b.booking_id): b for b in group}
+            group = list(unique_group_map.values())
+
             try:
                 ordered_group, total_km, total_min = _build_google_route(
                     group, DROP_LAT, DROP_LNG, GOOGLE_MAPS_API_KEY
                 )
             except HTTPException as e:
-                logger.warning(f"[{request_id}] Google route failure for group #{route_idx}: {e.detail}")
+                logger.warning(f"[{request_id}] Google route failed for group #{route_idx}: {e.detail}")
                 ordered_group, total_km, total_min = group, 0.0, 0
 
-            # Build response DTO
+            booking_ids = [str(b.booking_id) for b in ordered_group]
+            logger.info(f"[{request_id}] Suggested route #{route_idx} booking_ids: {booking_ids}")
+
             suggested_routes.append(
                 RouteSuggestion(
                     route_number=route_idx,
-                    booking_ids=[str(getattr(b, "booking_id", getattr(b, "id", ""))) for b in ordered_group],
+                    booking_ids=booking_ids,
                     pickups=[
                         PickupDetail(
-                            booking_id=str(getattr(b, "booking_id", getattr(b, "id", ""))),
+                            booking_id=str(b.booking_id),
                             employee_name=(b.employee.name if getattr(b, "employee", None) else None),
                             latitude=float(b.pickup_location_latitude),
                             longitude=float(b.pickup_location_longitude),
@@ -733,7 +746,7 @@ def suggest_routes(
             )
             route_idx += 1
 
-        # Final response
+        # Return final response
         return RouteSuggestionResponse(
             status="success",
             code=200,
@@ -791,84 +804,323 @@ def suggest_routes(
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
             data=None
         )
+
 # @router.post("/admin/routes/confirm")
 # async def confirm_routes_debug(request: Request):
 #     raw = await request.body()
 #     print("RAW BODY:", raw)
-
 @router.post("/admin/routes/confirm", response_model=RouteSuggestionResponse)
 def confirm_routes(
     payload: ConfirmRouteRequest,
     token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     request_id = str(uuid.uuid4())
     tenant_id = token_data.get("tenant_id")
-    logger.info(f"[{request_id}] Confirming routes for shift_id={payload.shift_id}, date={payload.date}")
+    logger.info(f"[{request_id}] Confirming routes shift_id={payload.shift_id} date={payload.date}")
 
     try:
-        # Validate date
-        filter_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
-        if filter_date < date.today():
+        # 1) Validate date
+        route_date = payload.date
+        if route_date < date.today():
             raise HTTPException(status_code=400, detail="Date cannot be in the past")
 
-        # Fetch shift
-        shift = db.query(Shift).filter(
-            Shift.id == payload.shift_id,
-            Shift.tenant_id == tenant_id
-        ).first()
-        if not shift:
-            raise HTTPException(status_code=404, detail="Shift not found")
+        # 2) Validate shift & tenant
+        shift = db.query(Shift).filter(Shift.id == payload.shift_id, Shift.tenant_id == tenant_id).first()
+        if not shift or not shift.tenant:
+            raise HTTPException(status_code=404, detail="Shift or tenant not found")
 
-        # Optional: validate each booking exists
-        all_booking_ids = [b.booking_id for r in payload.routes for b in r.pickups]
-        bookings = db.query(Booking).filter(
-            Booking.booking_id.in_(all_booking_ids),
-            Booking.shift_id == payload.shift_id,
-            Booking.booking_date == filter_date
-        ).all()
-        if len(bookings) != len(all_booking_ids):
-            raise HTTPException(status_code=400, detail="Some bookings do not exist for this shift/date")
+        tenant = shift.tenant
+        try:
+            default_drop_lat = float(tenant.latitude)
+            default_drop_lng = float(tenant.longitude)
+            default_drop_addr = tenant.address or "Office"
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid tenant location data")
 
-        # Save routes
-        for route in payload.routes:
-            route_entry = ShiftRoute(
-                shift_id=payload.shift_id,
-                route_date=filter_date,
-                route_number=route.route_number,
-                route_data=jsonable_encoder(route),
-                confirmed=payload.confirmed
+        # 3) Collect booking IDs from payload
+        all_ids = []
+        for r in payload.routes:
+            if not r.booking_ids:
+                raise HTTPException(status_code=400, detail="Route has no booking_ids")
+            all_ids.extend([str(b) for b in r.booking_ids])
+
+        # 4) Ensure no duplicates in request
+        if len(all_ids) != len(set(all_ids)):
+            dupes = sorted({bid for bid in all_ids if all_ids.count(bid) > 1})
+            raise HTTPException(status_code=400, detail=f"Duplicate booking(s) in request: {', '.join(dupes)}")
+
+        # 5) Check for already confirmed bookings
+        existing_conflicts = (
+            db.query(ShiftRouteStop.booking_id)
+            .join(ShiftRoute, ShiftRouteStop.shift_route_id == ShiftRoute.id)
+            .filter(
+                ShiftRoute.shift_id == payload.shift_id,
+                ShiftRoute.route_date == route_date,
+                ShiftRoute.status == RouteStatus.CONFIRMED,
+                ShiftRouteStop.booking_id.in_(set(all_ids)),
             )
-            db.add(route_entry)
+            .all()
+        )
+        if existing_conflicts:
+            already = [bid for (bid,) in existing_conflicts]
+            raise HTTPException(status_code=400, detail=f"Bookings already confirmed in another route: {already}")
+
+        # 6) Fetch bookings
+        bookings_map: Dict[str, Booking] = {
+            str(b.booking_id): b
+            for b in db.query(Booking)
+            .filter(
+                Booking.booking_id.in_(set(all_ids)),
+                Booking.shift_id == payload.shift_id,
+                Booking.booking_date == route_date,
+            )
+            .all()
+        }
+        if len(bookings_map) != len(set(all_ids)):
+            missing = [bid for bid in set(all_ids) if bid not in bookings_map]
+            raise HTTPException(status_code=400, detail=f"Unknown booking_ids for this shift/date: {missing}")
+
+        # Helper to validate coords
+        def _ok(b: Booking) -> bool:
+            return _validate_coord(getattr(b, "pickup_location_latitude", None)) and \
+                   _validate_coord(getattr(b, "pickup_location_longitude", None))
+
+        out_routes: List[RouteSuggestion] = []
+        now = datetime.utcnow()
+
+        # 7) Get max route_number already used for this shift/date
+        max_route_number = db.query(func.coalesce(func.max(ShiftRoute.route_number), 0)) \
+                             .filter(ShiftRoute.shift_id == payload.shift_id,
+                                     ShiftRoute.route_date == route_date).scalar()
+        next_route_number = max_route_number + 1
+
+        # 8) Process each route
+        for item in payload.routes:
+            drop_lat = item.drop_lat if item.drop_lat is not None else default_drop_lat
+            drop_lng = item.drop_lng if item.drop_lng is not None else default_drop_lng
+            drop_addr = item.drop_address if item.drop_address else default_drop_addr
+
+            raw_group: List[Booking] = []
+            invalid_ids: List[str] = []
+            for bid in item.booking_ids:
+                b = bookings_map[str(bid)]
+                if _ok(b):
+                    raw_group.append(b)
+                else:
+                    invalid_ids.append(str(bid))
+            if invalid_ids:
+                raise HTTPException(status_code=400, detail=f"Invalid coords: {invalid_ids}")
+
+            # Optional: Google optimization
+            group = raw_group
+            try:
+                ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
+            except HTTPException as e:
+                logger.warning(f"[{request_id}] Google route failure: {e.detail}")
+                ordered_group, total_km, total_min = group, 0.0, 0
+
+            dto = RouteSuggestion(
+                route_number=next_route_number,
+                booking_ids=[str(b.booking_id) for b in ordered_group],
+                pickups=[
+                    PickupDetail(
+                        booking_id=str(b.booking_id),
+                        employee_name=(b.employee.name if b.employee else None),
+                        latitude=float(b.pickup_location_latitude),
+                        longitude=float(b.pickup_location_longitude),
+                        address=b.pickup_location,
+                        landmark=(b.employee.landmark if b.employee else None),
+                    )
+                    for b in ordered_group
+                ],
+                estimated_distance_km=round(total_km, 2),
+                estimated_duration_min=int(total_min),
+                drop_lat=drop_lat,
+                drop_lng=drop_lng,
+                drop_address=drop_addr,
+            )
+
+            # Insert ShiftRoute
+            route_row = ShiftRoute(
+                shift_id=payload.shift_id,
+                route_date=route_date,
+                route_number=next_route_number,
+                route_data=jsonable_encoder(dto),
+                status=RouteStatus.CONFIRMED,
+            )
+            db.add(route_row)
+            db.flush()
+            logger.info(f"[{request_id}] ShiftRoute created with ID={route_row.id}, route_number={next_route_number}")
+
+            # Insert stops
+            for pos, b in enumerate(dto.pickups, start=1):
+                db.add(
+                    ShiftRouteStop(
+                        shift_route_id=route_row.id,
+                        position=pos,
+                        booking_id=b.booking_id,
+                        employee_name=b.employee_name,
+                        pickup_lat=b.latitude,
+                        pickup_lng=b.longitude,
+                        pickup_address=b.address,
+                        landmark=b.landmark,
+                    )
+                )
+                logger.info(f"[{request_id}] ShiftRouteStop added booking_id={b.booking_id}, pos={pos}")
+
+            # Update booking status → CONFIRMED
+            for b in ordered_group:
+                b.status = BookingStatus.CONFIRMED
+                b.updated_at = now
+                logger.info(f"[{request_id}] Booking status updated CONFIRMED booking_id={b.booking_id}")
+
+            out_routes.append(dto)
+            next_route_number += 1  # Increment for next route
+
         db.commit()
 
         return RouteSuggestionResponse(
             status="success",
             code=200,
-            message="Routes confirmed successfully" if payload.confirmed else "Routes saved as draft",
+            message="Routes confirmed successfully",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+            data=RouteSuggestionData(
+                shift_id=shift.id,
+                shift_code=shift.shift_code,
+                date=payload.date,
+                total_routes=len(out_routes),
+                routes=sorted(out_routes, key=lambda r: r.route_number),
+            ),
         )
 
     except HTTPException as e:
         db.rollback()
-        logger.warning(f"[{request_id}] HTTPException: {e.detail}")
-        return RouteSuggestionResponse(
-            status="error",
-            code=e.status_code,
-            message=str(e.detail),
-            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+        logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
+        return RouteSuggestionResponse(status="error", code=e.status_code, message=str(e.detail),
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
+        return RouteSuggestionResponse(status="error", code=400, message="Database integrity error.",
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
+    except Exception:
+        db.rollback()
+        logger.exception(f"[{request_id}] Unexpected error")
+        return RouteSuggestionResponse(status="error", code=500, message="Unexpected error while confirming routes",
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
+from math import ceil
+
+
+@router.get("/admin/routes/", response_model=RouteSuggestionResponse)
+def get_routes(
+    shift_id: int = Query(..., description="Filter by shift ID"),
+    route_number: Optional[int] = Query(None, description="Filter by route number"),
+    route_date: date = Query(..., description="Filter by route date in YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of routes per page"),
+    token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Get confirmed routes with all booking details.
+    Required: shift_id, route_date.
+    Optional: route_number. Supports pagination.
+    """
+    request_id = str(uuid.uuid4())
+    tenant_id = token_data.get("tenant_id")
+    logger.info(
+        f"[{request_id}] Fetching routes: tenant_id={tenant_id}, shift_id={shift_id}, "
+        f"route_number={route_number}, route_date={route_date}, page={page}, page_size={page_size}"
+    )
+
+    try:
+        # Validate tenant and shift
+        shift = db.query(Shift).filter(Shift.id == shift_id, Shift.tenant_id == tenant_id).first()
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found for this tenant")
+
+        # Base query
+        query = db.query(ShiftRoute).filter(
+            ShiftRoute.shift_id == shift_id,
+            ShiftRoute.status == RouteStatus.CONFIRMED,
+            ShiftRoute.route_date == route_date
         )
 
-    except Exception as e:
-        db.rollback()
-        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        if route_number:
+            query = query.filter(ShiftRoute.route_number == route_number)
+
+        # Pagination
+        total_routes = query.count()
+        total_pages = ceil(total_routes / page_size) if total_routes else 1
+        offset = (page - 1) * page_size
+
+        routes: List[ShiftRoute] = query.order_by(
+            ShiftRoute.route_date.desc(),
+            ShiftRoute.route_number.asc()
+        ).offset(offset).limit(page_size).all()
+
+        response_routes: List[RouteSuggestion] = []
+
+        for route in routes:
+            stops = db.query(ShiftRouteStop).filter(
+                ShiftRouteStop.shift_route_id == route.id
+            ).order_by(ShiftRouteStop.position).all()
+
+            pickups = []
+            booking_ids = []
+
+            for s in stops:
+                booking_ids.append(str(s.booking_id))
+                pickups.append(
+                    PickupDetail(
+                        booking_id=str(s.booking_id),
+                        employee_name=s.employee_name,
+                        latitude=s.pickup_lat,
+                        longitude=s.pickup_lng,
+                        address=s.pickup_address,
+                        landmark=s.landmark
+                    )
+                )
+
+            route_data = route.route_data or {}
+            response_routes.append(
+                RouteSuggestion(
+                    route_number=route.route_number,
+                    booking_ids=booking_ids,
+                    pickups=pickups,
+                    estimated_distance_km=route_data.get("estimated_distance_km", 0.0),
+                    estimated_duration_min=route_data.get("estimated_duration_min", 0),
+                    drop_lat=route_data.get("drop_lat", 0.0),
+                    drop_lng=route_data.get("drop_lng", 0.0),
+                    drop_address=route_data.get("drop_address", "Office")
+                )
+            )
+
         return RouteSuggestionResponse(
-            status="error",
-            code=500,
-            message="Unexpected error while confirming routes",
-            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+            status="success",
+            code=200,
+            message=f"Fetched {len(response_routes)} routes (page {page}/{total_pages})",
+            meta={
+                "request_id": request_id,
+                "generated_at": datetime.utcnow().isoformat(),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_routes": total_routes
+            },
+            data=RouteSuggestionData(
+                shift_id=shift.id,
+                shift_code=shift.shift_code,  # Always use valid shift_code from shift
+                date=route_date,
+                total_routes=len(response_routes),
+                routes=response_routes
+            )
         )
+
+    except HTTPException as e:
+        logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
+        raise
+    except Exception as e:
+        logger.exception(f"[{request_id}] Failed to fetch routes")
+        raise HTTPException(status_code=500, detail="Error fetching routes")
