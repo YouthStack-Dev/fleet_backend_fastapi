@@ -429,23 +429,51 @@ class Device(Base, TimestampMixin):
     employee = relationship("Employee", back_populates="device", uselist=False)
 
 
+
+class BookingStatus(str, enum.Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"         # assigned to a route
+    ONGOING = "ongoing"
+    PICKED_UP = "picked_up"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    NO_SHOW = "no_show"
+
+
+class RouteStatus(str, enum.Enum):
+    CONFIRMED = "confirmed"          # admin confirmed route
+    ASSIGNED_TO_VENDOR = "assigned_to_vendor"
+    DRIVER_ASSIGNED = "driver_assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class StopStatus(str, enum.Enum):
+    PENDING = "pending"
+    ARRIVED = "arrived"
+    PICKED_UP = "picked_up"
+    DROPPED = "dropped"
+    MISSED = "missed"
+
+
 class Booking(Base, TimestampMixin):
     __tablename__ = "bookings"
 
     booking_id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.employee_id"), nullable=False)
-    employee_code = Column(String(50), nullable=False)  # e.g., 'sam1', etc.
+    employee_code = Column(String(50), nullable=False)
     tenant_id = Column(Integer, ForeignKey("tenants.tenant_id"), nullable=False)
     shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=False)
     department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=False)
-    booking_date = Column(Date, nullable=False)  # Date of the booking
+    booking_date = Column(Date, nullable=False)
     pickup_location = Column(String(255), nullable=False)
     pickup_location_latitude = Column(String(50), nullable=False)
     pickup_location_longitude = Column(String(50), nullable=False)
     drop_location = Column(String(255), nullable=False)
     drop_location_latitude = Column(String(50), nullable=False)
     drop_location_longitude = Column(String(50), nullable=False)
-    status = Column(String(50), default="Pending")  # e.g., Pending, Confirmed, Completed, Cancelled
+    status = Column(Enum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -453,7 +481,7 @@ class Booking(Base, TimestampMixin):
     tenant = relationship("Tenant", back_populates="bookings")
     shift = relationship("Shift", back_populates="bookings")
     department = relationship("Department", back_populates="bookings")
-
+    shift_route_stops = relationship("ShiftRouteStop", back_populates="booking", cascade="all, delete-orphan")
 
 class ShiftRoute(Base):
     __tablename__ = "shift_routes"
@@ -462,9 +490,8 @@ class ShiftRoute(Base):
     shift_id = Column(Integer, ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False)
     route_date = Column(Date, nullable=False)
     route_number = Column(Integer, nullable=False)
-    # Canonical snapshot of the route as sent to FE (identical to suggestion payload)
     route_data = Column(JSONB, nullable=False)
-    confirmed = Column(Boolean, default=False, nullable=False)
+    status = Column(Enum(RouteStatus), default=RouteStatus.CONFIRMED, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -476,13 +503,14 @@ class ShiftRoute(Base):
     shift = relationship("Shift", back_populates="shift_routes")
     stops = relationship("ShiftRouteStop", back_populates="route", cascade="all, delete-orphan")
 
+
 class ShiftRouteStop(Base):
     __tablename__ = "shift_route_stops"
 
     id = Column(Integer, primary_key=True)
     shift_route_id = Column(Integer, ForeignKey("shift_routes.id", ondelete="CASCADE"), nullable=False)
-    position = Column(Integer, nullable=False)           # 1-based order after optimization
-    booking_id = Column(String, nullable=False)
+    position = Column(Integer, nullable=False)
+    booking_id = Column(Integer, ForeignKey("bookings.booking_id"), nullable=False)
     employee_name = Column(String)
     pickup_lat = Column(Float, nullable=False)
     pickup_lng = Column(Float, nullable=False)
@@ -490,3 +518,4 @@ class ShiftRouteStop(Base):
     landmark = Column(Text)
 
     route = relationship("ShiftRoute", back_populates="stops")
+    booking = relationship("Booking", back_populates="shift_route_stops")

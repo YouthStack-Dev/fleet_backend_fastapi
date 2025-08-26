@@ -107,7 +107,7 @@ def create_booking(
                 Booking.booking_date == booking_date
             ).first()
 
-            if existing_booking and existing_booking.status != "Cancelled":
+            if existing_booking and existing_booking.status != "cancelled":
                 raise HTTPException(status_code=400, detail=f"Existing booking for {booking_date}, not cancelled.")
 
             # Determine pickup and drop-off locations
@@ -142,7 +142,7 @@ def create_booking(
                 drop_location_latitude=drop_latitude,
                 drop_location_longitude=drop_longitude,
                 booking_date=booking_date,
-                status="Pending",
+                status="pending",
                 created_at=datetime.datetime.now(),
                 updated_at=datetime.datetime.now(),
             )
@@ -252,7 +252,7 @@ def cancel_booking(
             raise HTTPException(status_code=400, detail="Booking cannot be canceled after cutoff time.")
 
         # Cancel the booking
-        booking.status = "Cancelled"
+        booking.status = "cancelled"
         db.commit()
 
         return {"detail": "Booking canceled successfully"}

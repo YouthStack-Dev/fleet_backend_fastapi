@@ -8,7 +8,7 @@ from pydantic import BaseModel
 import logging
 from app.api.schemas.schemas import ConfirmRouteRequest, PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
-from app.database.models import Booking, Shift, ShiftRoute, ShiftRouteStop
+from app.database.models import Booking, RouteStatus, Shift, ShiftRoute, ShiftRouteStop
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 router = APIRouter(tags=["Admin Bookings"])
@@ -795,7 +795,6 @@ def suggest_routes(
 # async def confirm_routes_debug(request: Request):
 #     raw = await request.body()
 #     print("RAW BODY:", raw)
-
 @router.post("/admin/routes/confirm", response_model=RouteSuggestionResponse)
 def confirm_routes(
     payload: ConfirmRouteRequest,
@@ -807,11 +806,8 @@ def confirm_routes(
     logger.info(f"[{request_id}] Confirming routes shift_id={payload.shift_id} date={payload.date}")
 
     try:
-        # 1) Validate date (no past)
-        try:
-            route_date = payload.date
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        # 1) Validate date (cannot be past)
+        route_date = payload.date
         if route_date < date.today():
             raise HTTPException(status_code=400, detail="Date cannot be in the past")
 
@@ -832,20 +828,35 @@ def confirm_routes(
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Invalid tenant location data")
 
-        # 3) Collect and validate booking IDs
+        # 3) Collect booking IDs from payload
         all_ids = []
         for r in payload.routes:
             if not r.booking_ids:
                 raise HTTPException(status_code=400, detail=f"Route {r.route_number} has no booking_ids")
             all_ids.extend([str(b) for b in r.booking_ids])
 
-        # check duplicates across routes
+        # 4) Ensure no duplicates inside request
         if len(all_ids) != len(set(all_ids)):
-            # find the duplicates
             dupes = sorted({bid for bid in all_ids if all_ids.count(bid) > 1})
-            raise HTTPException(status_code=400, detail=f"Duplicate booking(s) across routes: {', '.join(dupes)}")
+            raise HTTPException(status_code=400, detail=f"Duplicate booking(s) in request: {', '.join(dupes)}")
 
-        # Fetch bookings for the date/shift
+        # 5) Ensure no booking is already CONFIRMED in another route for same shift/date
+        existing_conflicts = (
+            db.query(ShiftRouteStop.booking_id)
+            .join(ShiftRoute, ShiftRouteStop.shift_route_id == ShiftRoute.id)
+            .filter(
+                ShiftRoute.shift_id == payload.shift_id,
+                ShiftRoute.route_date == route_date,
+                ShiftRoute.status == RouteStatus.CONFIRMED,   # ✅ replaced confirmed column
+                ShiftRouteStop.booking_id.in_(set(all_ids)),
+            )
+            .all()
+        )
+        if existing_conflicts:
+            already = [bid for (bid,) in existing_conflicts]
+            raise HTTPException(status_code=400, detail=f"Bookings already confirmed in another route: {already}")
+
+        # 6) Fetch bookings
         bookings_map: Dict[str, Booking] = {
             str(b.booking_id): b
             for b in db.query(Booking)
@@ -864,10 +875,10 @@ def confirm_routes(
             return _validate_coord(getattr(b, "pickup_location_latitude", None)) and \
                    _validate_coord(getattr(b, "pickup_location_longitude", None))
 
-        # 4) For each route: rebuild pickups from DB, call Google, persist upsert
         out_routes: List[RouteSuggestion] = []
         now = datetime.utcnow()
 
+        # 7) Process each route
         for item in payload.routes:
             drop_lat = item.drop_lat if item.drop_lat is not None else default_drop_lat
             drop_lng = item.drop_lng if item.drop_lng is not None else default_drop_lng
@@ -882,34 +893,27 @@ def confirm_routes(
                 else:
                     invalid_ids.append(str(bid))
             if invalid_ids:
-                raise HTTPException(status_code=400, detail=f"Bookings with invalid coordinates in route {item.route_number}: {invalid_ids}")
+                raise HTTPException(status_code=400, detail=f"Invalid coords in route {item.route_number}: {invalid_ids}")
 
-            # Google optimize or preserve FE order
+            # Google optimization
             group = raw_group
-            if item.optimize and len(raw_group) > 1:
-                try:
-                    ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
-                except HTTPException as e:
-                    logger.warning(f"[{request_id}] Google route failure route={item.route_number}: {e.detail}")
-                    ordered_group, total_km, total_min = group, 0.0, 0
-            else:
-                # compute distance/duration even if order is fixed
-                try:
-                    ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
-                except HTTPException:
-                    ordered_group, total_km, total_min = group, 0.0, 0
+            try:
+                ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
+            except HTTPException as e:
+                logger.warning(f"[{request_id}] Google route failure route={item.route_number}: {e.detail}")
+                ordered_group, total_km, total_min = group, 0.0, 0
 
             dto = RouteSuggestion(
                 route_number=item.route_number,
-                booking_ids=[str(getattr(b, "booking_id", getattr(b, "id", ""))) for b in ordered_group],
+                booking_ids=[str(b.booking_id) for b in ordered_group],
                 pickups=[
                     PickupDetail(
-                        booking_id=str(getattr(b, "booking_id", getattr(b, "id", ""))),
-                        employee_name=(b.employee.name if getattr(b, "employee", None) else None),
+                        booking_id=str(b.booking_id),
+                        employee_name=(b.employee.name if b.employee else None),
                         latitude=float(b.pickup_location_latitude),
                         longitude=float(b.pickup_location_longitude),
-                        address=getattr(b, "pickup_location", None),
-                        landmark=(b.employee.landmark if getattr(b, "employee", None) else None),
+                        address=b.pickup_location,
+                        landmark=(b.employee.landmark if b.employee else None),
                     )
                     for b in ordered_group
                 ],
@@ -920,7 +924,7 @@ def confirm_routes(
                 drop_address=drop_addr,
             )
 
-            # UPSERT ShiftRoute
+            # Upsert ShiftRoute
             existing = (
                 db.query(ShiftRoute)
                 .filter(
@@ -931,13 +935,11 @@ def confirm_routes(
                 .with_for_update(nowait=False)
                 .first()
             )
-            previous_json = jsonable_encoder(existing.route_data) if existing else None
 
             if existing:
                 existing.route_data = jsonable_encoder(dto)
-                existing.confirmed = payload.confirmed
+                existing.status = RouteStatus.CONFIRMED   # ✅ set via status
                 existing.updated_at = now
-                # wipe stops for clean re-insert
                 db.query(ShiftRouteStop).filter(ShiftRouteStop.shift_route_id == existing.id).delete()
                 route_row = existing
             else:
@@ -946,12 +948,12 @@ def confirm_routes(
                     route_date=route_date,
                     route_number=item.route_number,
                     route_data=jsonable_encoder(dto),
-                    confirmed=payload.confirmed,
+                    status=RouteStatus.CONFIRMED,  # ✅ instead of confirmed=True
                 )
                 db.add(route_row)
-                db.flush()  # get route_row.id
+                db.flush()
 
-            # Insert normalized stops
+            # Insert stops
             for pos, b in enumerate(dto.pickups, start=1):
                 db.add(
                     ShiftRouteStop(
@@ -966,26 +968,19 @@ def confirm_routes(
                     )
                 )
 
-            # Optional audit trail
-            # db.add(ShiftRouteHistory(
-            #     shift_id=payload.shift_id,
-            #     route_date=route_date,
-            #     route_number=item.route_number,
-            #     action="update" if existing else "create",
-            #     previous_json=previous_json,
-            #     new_json=jsonable_encoder(dto),
-            #     actor_user_id=token_data.get("user_id"),
-            # ))
+            # Update booking status → Confirmed
+            for b in ordered_group:
+                b.status = "confirmed"
+                b.updated_at = now
 
             out_routes.append(dto)
 
         db.commit()
 
-        # 5) Return enriched response (same shape as /suggest)
         return RouteSuggestionResponse(
             status="success",
             code=200,
-            message="Routes confirmed successfully" if payload.confirmed else "Routes saved as draft",
+            message="Routes confirmed successfully",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
             data=RouteSuggestionData(
                 shift_id=shift.id,
@@ -999,30 +994,15 @@ def confirm_routes(
     except HTTPException as e:
         db.rollback()
         logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
-        return RouteSuggestionResponse(
-            status="error",
-            code=e.status_code,
-            message=str(e.detail),
-            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None,
-        )
+        return RouteSuggestionResponse(status="error", code=e.status_code, message=str(e.detail),
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
     except IntegrityError as e:
         db.rollback()
         logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
-        return RouteSuggestionResponse(
-            status="error",
-            code=400,
-            message="Database integrity error.",
-            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None,
-        )
+        return RouteSuggestionResponse(status="error", code=400, message="Database integrity error.",
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)
     except Exception:
         db.rollback()
         logger.exception(f"[{request_id}] Unexpected error")
-        return RouteSuggestionResponse(
-            status="error",
-            code=500,
-            message="Unexpected error while confirming routes",
-            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None,
-        )
+        return RouteSuggestionResponse(status="error", code=500, message="Unexpected error while confirming routes",
+                                       meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()}, data=None)

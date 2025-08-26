@@ -846,4 +846,3 @@ class ConfirmRouteRequest(BaseModel):
     shift_id: int
     date: date
     routes: List[ConfirmRouteItem]
-    confirmed: bool
