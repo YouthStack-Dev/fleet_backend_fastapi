@@ -624,7 +624,6 @@ def _build_google_route(group: List, drop_lat: float, drop_lng: float, api_key: 
     return ordered, total_distance_km, total_duration_min
 
 # ---- Endpoint ----
-
 @router.post("/admin/routes/suggest", response_model=RouteSuggestionResponse)
 def suggest_routes(
     payload: RouteSuggestionRequest,
@@ -633,12 +632,12 @@ def suggest_routes(
 ):
     """
     Admin endpoint to suggest optimized routes for a shift on a specific date.
-    Does not assign drivers — generates a draft arrangement only.
+    Generates draft optimized routes for unconfirmed bookings only.
     """
     request_id = str(uuid.uuid4())
     tenant_id = token_data.get("tenant_id")
     logger.info(
-        f"[{request_id}] RouteSuggest init tenant_id={tenant_id}, shift_id={payload.shift_id}, date={payload.date}, "
+        f"[{request_id}] RouteSuggest init: tenant_id={tenant_id}, shift_id={payload.shift_id}, date={payload.date}, "
         f"capacity={CAR_CAPACITY}, radius_km={MAX_RADIUS_KM}, sklearn={_SKLEARN_AVAILABLE}"
     )
 
@@ -674,47 +673,62 @@ def suggest_routes(
         if not bookings:
             raise HTTPException(status_code=404, detail="No bookings found for this shift and date")
 
-        # Filter out bookings without valid pickup coordinates
-        valid_bookings = []
-        dropped = 0
-        for b in bookings:
-            if _validate_coord(getattr(b, "pickup_location_latitude", None)) and \
-               _validate_coord(getattr(b, "pickup_location_longitude", None)):
-                valid_bookings.append(b)
-            else:
-                dropped += 1
-        if dropped:
-            logger.warning(f"[{request_id}] Dropped {dropped} bookings with invalid/missing pickup coords")
+        # Get all confirmed booking IDs for this shift/date
+        confirmed_booking_ids = {
+            str(bid) for (bid,) in db.query(ShiftRouteStop.booking_id)
+            .join(ShiftRoute, ShiftRouteStop.shift_route_id == ShiftRoute.id)
+            .filter(
+                ShiftRoute.shift_id == payload.shift_id,
+                ShiftRoute.route_date == filter_date,
+                ShiftRoute.status == RouteStatus.CONFIRMED
+            ).all()
+        }
+        logger.info(f"[{request_id}] Confirmed booking_ids excluded: {confirmed_booking_ids}")
+
+        # Filter out confirmed bookings & invalid coords
+        valid_bookings: List[Booking] = [
+            b for b in bookings
+            if str(b.booking_id) not in confirmed_booking_ids
+            and _validate_coord(getattr(b, "pickup_location_latitude", None))
+            and _validate_coord(getattr(b, "pickup_location_longitude", None))
+        ]
+        logger.info(f"[{request_id}] Valid bookings for clustering: {[b.booking_id for b in valid_bookings]}")
 
         if not valid_bookings:
-            raise HTTPException(status_code=400, detail="All bookings have invalid pickup coordinates")
+            raise HTTPException(status_code=400, detail="No valid bookings available for route suggestion")
 
-        # ----- Cluster + smart split (radius-aware, capacity-aware) -----
+        # Cluster + smart split
         grouped_bookings: List[List[Booking]] = _cluster_bookings(
             valid_bookings, CAR_CAPACITY, MAX_RADIUS_KM, logger
         )
         logger.info(f"[{request_id}] Clustering complete: groups={len(grouped_bookings)}")
 
-        # ----- Build Google routes for each group -----
+        # Build Google routes per group
         suggested_routes: List[RouteSuggestion] = []
         route_idx = 1
         for group in grouped_bookings:
+            # Remove duplicates inside the group
+            unique_group_map = {str(b.booking_id): b for b in group}
+            group = list(unique_group_map.values())
+
             try:
                 ordered_group, total_km, total_min = _build_google_route(
                     group, DROP_LAT, DROP_LNG, GOOGLE_MAPS_API_KEY
                 )
             except HTTPException as e:
-                logger.warning(f"[{request_id}] Google route failure for group #{route_idx}: {e.detail}")
+                logger.warning(f"[{request_id}] Google route failed for group #{route_idx}: {e.detail}")
                 ordered_group, total_km, total_min = group, 0.0, 0
 
-            # Build response DTO
+            booking_ids = [str(b.booking_id) for b in ordered_group]
+            logger.info(f"[{request_id}] Suggested route #{route_idx} booking_ids: {booking_ids}")
+
             suggested_routes.append(
                 RouteSuggestion(
                     route_number=route_idx,
-                    booking_ids=[str(getattr(b, "booking_id", getattr(b, "id", ""))) for b in ordered_group],
+                    booking_ids=booking_ids,
                     pickups=[
                         PickupDetail(
-                            booking_id=str(getattr(b, "booking_id", getattr(b, "id", ""))),
+                            booking_id=str(b.booking_id),
                             employee_name=(b.employee.name if getattr(b, "employee", None) else None),
                             latitude=float(b.pickup_location_latitude),
                             longitude=float(b.pickup_location_longitude),
@@ -732,7 +746,7 @@ def suggest_routes(
             )
             route_idx += 1
 
-        # Final response
+        # Return final response
         return RouteSuggestionResponse(
             status="success",
             code=200,
@@ -790,6 +804,7 @@ def suggest_routes(
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
             data=None
         )
+
 # @router.post("/admin/routes/confirm")
 # async def confirm_routes_debug(request: Request):
 #     raw = await request.body()
