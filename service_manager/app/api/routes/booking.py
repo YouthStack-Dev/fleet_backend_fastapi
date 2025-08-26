@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 import logging
 from app.api.schemas.schemas import ConfirmRouteRequest, PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
-from app.database.models import Booking, RouteStatus, Shift, ShiftRoute, ShiftRouteStop
+from app.database.models import Booking, BookingStatus, RouteStatus, Shift, ShiftRoute, ShiftRouteStop
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 router = APIRouter(tags=["Admin Bookings"])
@@ -131,8 +132,6 @@ from app.database.models import Shift, Booking
 from app.api.schemas.schemas import ShiftsByDateResponse, BookingOut
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
-
-logger = logging.getLogger(__name__)
 
 @router.get("/admin/shift-bookings/")
 def get_shift_bookings_by_date(
@@ -806,17 +805,13 @@ def confirm_routes(
     logger.info(f"[{request_id}] Confirming routes shift_id={payload.shift_id} date={payload.date}")
 
     try:
-        # 1) Validate date (cannot be past)
+        # 1) Validate date
         route_date = payload.date
         if route_date < date.today():
             raise HTTPException(status_code=400, detail="Date cannot be in the past")
 
         # 2) Validate shift & tenant
-        shift = (
-            db.query(Shift)
-            .filter(Shift.id == payload.shift_id, Shift.tenant_id == tenant_id)
-            .first()
-        )
+        shift = db.query(Shift).filter(Shift.id == payload.shift_id, Shift.tenant_id == tenant_id).first()
         if not shift or not shift.tenant:
             raise HTTPException(status_code=404, detail="Shift or tenant not found")
 
@@ -832,22 +827,22 @@ def confirm_routes(
         all_ids = []
         for r in payload.routes:
             if not r.booking_ids:
-                raise HTTPException(status_code=400, detail=f"Route {r.route_number} has no booking_ids")
+                raise HTTPException(status_code=400, detail="Route has no booking_ids")
             all_ids.extend([str(b) for b in r.booking_ids])
 
-        # 4) Ensure no duplicates inside request
+        # 4) Ensure no duplicates in request
         if len(all_ids) != len(set(all_ids)):
             dupes = sorted({bid for bid in all_ids if all_ids.count(bid) > 1})
             raise HTTPException(status_code=400, detail=f"Duplicate booking(s) in request: {', '.join(dupes)}")
 
-        # 5) Ensure no booking is already CONFIRMED in another route for same shift/date
+        # 5) Check for already confirmed bookings
         existing_conflicts = (
             db.query(ShiftRouteStop.booking_id)
             .join(ShiftRoute, ShiftRouteStop.shift_route_id == ShiftRoute.id)
             .filter(
                 ShiftRoute.shift_id == payload.shift_id,
                 ShiftRoute.route_date == route_date,
-                ShiftRoute.status == RouteStatus.CONFIRMED,   # ✅ replaced confirmed column
+                ShiftRoute.status == RouteStatus.CONFIRMED,
                 ShiftRouteStop.booking_id.in_(set(all_ids)),
             )
             .all()
@@ -860,11 +855,12 @@ def confirm_routes(
         bookings_map: Dict[str, Booking] = {
             str(b.booking_id): b
             for b in db.query(Booking)
-                .filter(
-                    Booking.booking_id.in_(set(all_ids)),
-                    Booking.shift_id == payload.shift_id,
-                    Booking.booking_date == route_date,
-                ).all()
+            .filter(
+                Booking.booking_id.in_(set(all_ids)),
+                Booking.shift_id == payload.shift_id,
+                Booking.booking_date == route_date,
+            )
+            .all()
         }
         if len(bookings_map) != len(set(all_ids)):
             missing = [bid for bid in set(all_ids) if bid not in bookings_map]
@@ -878,7 +874,13 @@ def confirm_routes(
         out_routes: List[RouteSuggestion] = []
         now = datetime.utcnow()
 
-        # 7) Process each route
+        # 7) Get max route_number already used for this shift/date
+        max_route_number = db.query(func.coalesce(func.max(ShiftRoute.route_number), 0)) \
+                             .filter(ShiftRoute.shift_id == payload.shift_id,
+                                     ShiftRoute.route_date == route_date).scalar()
+        next_route_number = max_route_number + 1
+
+        # 8) Process each route
         for item in payload.routes:
             drop_lat = item.drop_lat if item.drop_lat is not None else default_drop_lat
             drop_lng = item.drop_lng if item.drop_lng is not None else default_drop_lng
@@ -893,18 +895,18 @@ def confirm_routes(
                 else:
                     invalid_ids.append(str(bid))
             if invalid_ids:
-                raise HTTPException(status_code=400, detail=f"Invalid coords in route {item.route_number}: {invalid_ids}")
+                raise HTTPException(status_code=400, detail=f"Invalid coords: {invalid_ids}")
 
-            # Google optimization
+            # Optional: Google optimization
             group = raw_group
             try:
                 ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
             except HTTPException as e:
-                logger.warning(f"[{request_id}] Google route failure route={item.route_number}: {e.detail}")
+                logger.warning(f"[{request_id}] Google route failure: {e.detail}")
                 ordered_group, total_km, total_min = group, 0.0, 0
 
             dto = RouteSuggestion(
-                route_number=item.route_number,
+                route_number=next_route_number,
                 booking_ids=[str(b.booking_id) for b in ordered_group],
                 pickups=[
                     PickupDetail(
@@ -924,34 +926,17 @@ def confirm_routes(
                 drop_address=drop_addr,
             )
 
-            # Upsert ShiftRoute
-            existing = (
-                db.query(ShiftRoute)
-                .filter(
-                    ShiftRoute.shift_id == payload.shift_id,
-                    ShiftRoute.route_date == route_date,
-                    ShiftRoute.route_number == item.route_number,
-                )
-                .with_for_update(nowait=False)
-                .first()
+            # Insert ShiftRoute
+            route_row = ShiftRoute(
+                shift_id=payload.shift_id,
+                route_date=route_date,
+                route_number=next_route_number,
+                route_data=jsonable_encoder(dto),
+                status=RouteStatus.CONFIRMED,
             )
-
-            if existing:
-                existing.route_data = jsonable_encoder(dto)
-                existing.status = RouteStatus.CONFIRMED   # ✅ set via status
-                existing.updated_at = now
-                db.query(ShiftRouteStop).filter(ShiftRouteStop.shift_route_id == existing.id).delete()
-                route_row = existing
-            else:
-                route_row = ShiftRoute(
-                    shift_id=payload.shift_id,
-                    route_date=route_date,
-                    route_number=item.route_number,
-                    route_data=jsonable_encoder(dto),
-                    status=RouteStatus.CONFIRMED,  # ✅ instead of confirmed=True
-                )
-                db.add(route_row)
-                db.flush()
+            db.add(route_row)
+            db.flush()
+            logger.info(f"[{request_id}] ShiftRoute created with ID={route_row.id}, route_number={next_route_number}")
 
             # Insert stops
             for pos, b in enumerate(dto.pickups, start=1):
@@ -967,13 +952,16 @@ def confirm_routes(
                         landmark=b.landmark,
                     )
                 )
+                logger.info(f"[{request_id}] ShiftRouteStop added booking_id={b.booking_id}, pos={pos}")
 
-            # Update booking status → Confirmed
+            # Update booking status → CONFIRMED
             for b in ordered_group:
-                b.status = "confirmed"
+                b.status = BookingStatus.CONFIRMED
                 b.updated_at = now
+                logger.info(f"[{request_id}] Booking status updated CONFIRMED booking_id={b.booking_id}")
 
             out_routes.append(dto)
+            next_route_number += 1  # Increment for next route
 
         db.commit()
 

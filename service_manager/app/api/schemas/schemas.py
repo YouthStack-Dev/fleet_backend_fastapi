@@ -835,7 +835,7 @@ class RouteSuggestionResponse(BaseModel):
 
 # ---- New confirm request (FE sends only group/order/overrides) ----
 class ConfirmRouteItem(BaseModel):
-    route_number: int
+    # route_number: int
     booking_ids: List[Union[int, str]]           # ordered list (admin order). If you want BE to optimize, send unordered + flag below
     optimize: bool = False                        # if True, BE may reorder via Google
     drop_lat: Optional[float] = None              # allow per-route override
