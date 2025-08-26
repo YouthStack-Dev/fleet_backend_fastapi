@@ -491,7 +491,14 @@ class ShiftRoute(Base):
     route_date = Column(Date, nullable=False)
     route_number = Column(Integer, nullable=False)
     route_data = Column(JSONB, nullable=False)
-    status = Column(Enum(RouteStatus), default=RouteStatus.CONFIRMED, nullable=False)
+
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id"), nullable=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.vehicle_id"), nullable=True)
+    driver_id = Column(Integer, ForeignKey("drivers.driver_id"), nullable=True)
+
+    status = Column(Enum(RouteStatus, name="routestatus", create_type=False),
+                    default=RouteStatus.CONFIRMED, nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -502,6 +509,9 @@ class ShiftRoute(Base):
 
     shift = relationship("Shift", back_populates="shift_routes")
     stops = relationship("ShiftRouteStop", back_populates="route", cascade="all, delete-orphan")
+    vendor = relationship("Vendor")
+    vehicle = relationship("Vehicle")
+    driver = relationship("Driver")
 
 
 class ShiftRouteStop(Base):
@@ -519,3 +529,4 @@ class ShiftRouteStop(Base):
 
     route = relationship("ShiftRoute", back_populates="stops")
     booking = relationship("Booking", back_populates="shift_route_stops")
+
