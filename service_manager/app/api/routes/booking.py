@@ -8,7 +8,7 @@ from pydantic import BaseModel
 import logging
 from app.api.schemas.schemas import ConfirmRouteRequest, PickupDetail, RouteSuggestion, RouteSuggestionData, RouteSuggestionRequest,  GenerateRouteRequest, RouteSuggestionResponse,GenerateRouteResponse,TempRoute,PickupPoint, ShiftBookingResponse , BookingOut, ShiftInfo
 from sqlalchemy.orm import joinedload
-from app.database.models import Booking, Shift, ShiftRoute
+from app.database.models import Booking, Shift, ShiftRoute, ShiftRouteStop
 from common_utils.auth.permission_checker import PermissionChecker
 from app.database.database import get_db
 router = APIRouter(tags=["Admin Bookings"])
@@ -800,75 +800,229 @@ def suggest_routes(
 def confirm_routes(
     payload: ConfirmRouteRequest,
     token_data: dict = Depends(PermissionChecker(["cutoff.create"])),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     request_id = str(uuid.uuid4())
     tenant_id = token_data.get("tenant_id")
-    logger.info(f"[{request_id}] Confirming routes for shift_id={payload.shift_id}, date={payload.date}")
+    logger.info(f"[{request_id}] Confirming routes shift_id={payload.shift_id} date={payload.date}")
 
     try:
-        # Validate date
-        filter_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
-        if filter_date < date.today():
+        # 1) Validate date (no past)
+        try:
+            route_date = payload.date
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        if route_date < date.today():
             raise HTTPException(status_code=400, detail="Date cannot be in the past")
 
-        # Fetch shift
-        shift = db.query(Shift).filter(
-            Shift.id == payload.shift_id,
-            Shift.tenant_id == tenant_id
-        ).first()
-        if not shift:
-            raise HTTPException(status_code=404, detail="Shift not found")
+        # 2) Validate shift & tenant
+        shift = (
+            db.query(Shift)
+            .filter(Shift.id == payload.shift_id, Shift.tenant_id == tenant_id)
+            .first()
+        )
+        if not shift or not shift.tenant:
+            raise HTTPException(status_code=404, detail="Shift or tenant not found")
 
-        # Optional: validate each booking exists
-        all_booking_ids = [b.booking_id for r in payload.routes for b in r.pickups]
-        bookings = db.query(Booking).filter(
-            Booking.booking_id.in_(all_booking_ids),
-            Booking.shift_id == payload.shift_id,
-            Booking.booking_date == filter_date
-        ).all()
-        if len(bookings) != len(all_booking_ids):
-            raise HTTPException(status_code=400, detail="Some bookings do not exist for this shift/date")
+        tenant = shift.tenant
+        try:
+            default_drop_lat = float(tenant.latitude)
+            default_drop_lng = float(tenant.longitude)
+            default_drop_addr = tenant.address or "Office"
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid tenant location data")
 
-        # Save routes
-        for route in payload.routes:
-            route_entry = ShiftRoute(
-                shift_id=payload.shift_id,
-                route_date=filter_date,
-                route_number=route.route_number,
-                route_data=jsonable_encoder(route),
-                confirmed=payload.confirmed
+        # 3) Collect and validate booking IDs
+        all_ids = []
+        for r in payload.routes:
+            if not r.booking_ids:
+                raise HTTPException(status_code=400, detail=f"Route {r.route_number} has no booking_ids")
+            all_ids.extend([str(b) for b in r.booking_ids])
+
+        # check duplicates across routes
+        if len(all_ids) != len(set(all_ids)):
+            # find the duplicates
+            dupes = sorted({bid for bid in all_ids if all_ids.count(bid) > 1})
+            raise HTTPException(status_code=400, detail=f"Duplicate booking(s) across routes: {', '.join(dupes)}")
+
+        # Fetch bookings for the date/shift
+        bookings_map: Dict[str, Booking] = {
+            str(b.booking_id): b
+            for b in db.query(Booking)
+                .filter(
+                    Booking.booking_id.in_(set(all_ids)),
+                    Booking.shift_id == payload.shift_id,
+                    Booking.booking_date == route_date,
+                ).all()
+        }
+        if len(bookings_map) != len(set(all_ids)):
+            missing = [bid for bid in set(all_ids) if bid not in bookings_map]
+            raise HTTPException(status_code=400, detail=f"Unknown booking_ids for this shift/date: {missing}")
+
+        # Helper to validate coords
+        def _ok(b: Booking) -> bool:
+            return _validate_coord(getattr(b, "pickup_location_latitude", None)) and \
+                   _validate_coord(getattr(b, "pickup_location_longitude", None))
+
+        # 4) For each route: rebuild pickups from DB, call Google, persist upsert
+        out_routes: List[RouteSuggestion] = []
+        now = datetime.utcnow()
+
+        for item in payload.routes:
+            drop_lat = item.drop_lat if item.drop_lat is not None else default_drop_lat
+            drop_lng = item.drop_lng if item.drop_lng is not None else default_drop_lng
+            drop_addr = item.drop_address if item.drop_address else default_drop_addr
+
+            raw_group: List[Booking] = []
+            invalid_ids: List[str] = []
+            for bid in item.booking_ids:
+                b = bookings_map[str(bid)]
+                if _ok(b):
+                    raw_group.append(b)
+                else:
+                    invalid_ids.append(str(bid))
+            if invalid_ids:
+                raise HTTPException(status_code=400, detail=f"Bookings with invalid coordinates in route {item.route_number}: {invalid_ids}")
+
+            # Google optimize or preserve FE order
+            group = raw_group
+            if item.optimize and len(raw_group) > 1:
+                try:
+                    ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
+                except HTTPException as e:
+                    logger.warning(f"[{request_id}] Google route failure route={item.route_number}: {e.detail}")
+                    ordered_group, total_km, total_min = group, 0.0, 0
+            else:
+                # compute distance/duration even if order is fixed
+                try:
+                    ordered_group, total_km, total_min = _build_google_route(group, drop_lat, drop_lng, GOOGLE_MAPS_API_KEY)
+                except HTTPException:
+                    ordered_group, total_km, total_min = group, 0.0, 0
+
+            dto = RouteSuggestion(
+                route_number=item.route_number,
+                booking_ids=[str(getattr(b, "booking_id", getattr(b, "id", ""))) for b in ordered_group],
+                pickups=[
+                    PickupDetail(
+                        booking_id=str(getattr(b, "booking_id", getattr(b, "id", ""))),
+                        employee_name=(b.employee.name if getattr(b, "employee", None) else None),
+                        latitude=float(b.pickup_location_latitude),
+                        longitude=float(b.pickup_location_longitude),
+                        address=getattr(b, "pickup_location", None),
+                        landmark=(b.employee.landmark if getattr(b, "employee", None) else None),
+                    )
+                    for b in ordered_group
+                ],
+                estimated_distance_km=round(total_km, 2),
+                estimated_duration_min=int(total_min),
+                drop_lat=drop_lat,
+                drop_lng=drop_lng,
+                drop_address=drop_addr,
             )
-            db.add(route_entry)
+
+            # UPSERT ShiftRoute
+            existing = (
+                db.query(ShiftRoute)
+                .filter(
+                    ShiftRoute.shift_id == payload.shift_id,
+                    ShiftRoute.route_date == route_date,
+                    ShiftRoute.route_number == item.route_number,
+                )
+                .with_for_update(nowait=False)
+                .first()
+            )
+            previous_json = jsonable_encoder(existing.route_data) if existing else None
+
+            if existing:
+                existing.route_data = jsonable_encoder(dto)
+                existing.confirmed = payload.confirmed
+                existing.updated_at = now
+                # wipe stops for clean re-insert
+                db.query(ShiftRouteStop).filter(ShiftRouteStop.shift_route_id == existing.id).delete()
+                route_row = existing
+            else:
+                route_row = ShiftRoute(
+                    shift_id=payload.shift_id,
+                    route_date=route_date,
+                    route_number=item.route_number,
+                    route_data=jsonable_encoder(dto),
+                    confirmed=payload.confirmed,
+                )
+                db.add(route_row)
+                db.flush()  # get route_row.id
+
+            # Insert normalized stops
+            for pos, b in enumerate(dto.pickups, start=1):
+                db.add(
+                    ShiftRouteStop(
+                        shift_route_id=route_row.id,
+                        position=pos,
+                        booking_id=b.booking_id,
+                        employee_name=b.employee_name,
+                        pickup_lat=b.latitude,
+                        pickup_lng=b.longitude,
+                        pickup_address=b.address,
+                        landmark=b.landmark,
+                    )
+                )
+
+            # Optional audit trail
+            # db.add(ShiftRouteHistory(
+            #     shift_id=payload.shift_id,
+            #     route_date=route_date,
+            #     route_number=item.route_number,
+            #     action="update" if existing else "create",
+            #     previous_json=previous_json,
+            #     new_json=jsonable_encoder(dto),
+            #     actor_user_id=token_data.get("user_id"),
+            # ))
+
+            out_routes.append(dto)
+
         db.commit()
 
+        # 5) Return enriched response (same shape as /suggest)
         return RouteSuggestionResponse(
             status="success",
             code=200,
             message="Routes confirmed successfully" if payload.confirmed else "Routes saved as draft",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+            data=RouteSuggestionData(
+                shift_id=shift.id,
+                shift_code=shift.shift_code,
+                date=payload.date,
+                total_routes=len(out_routes),
+                routes=sorted(out_routes, key=lambda r: r.route_number),
+            ),
         )
 
     except HTTPException as e:
         db.rollback()
-        logger.warning(f"[{request_id}] HTTPException: {e.detail}")
+        logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
         return RouteSuggestionResponse(
             status="error",
             code=e.status_code,
             message=str(e.detail),
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+            data=None,
         )
-
-    except Exception as e:
+    except IntegrityError as e:
         db.rollback()
-        logger.error(f"[{request_id}] Unexpected error: {str(e)}")
+        logger.error(f"[{request_id}] IntegrityError: {str(e.orig)}")
+        return RouteSuggestionResponse(
+            status="error",
+            code=400,
+            message="Database integrity error.",
+            meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
+            data=None,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(f"[{request_id}] Unexpected error")
         return RouteSuggestionResponse(
             status="error",
             code=500,
             message="Unexpected error while confirming routes",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
-            data=None
+            data=None,
         )

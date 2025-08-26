@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Boolean, Column, String, Integer, ForeignKey, DateTime, JSON, Text, UniqueConstraint, Table, Date, text
+    Boolean, Column, Float, Index, String, Integer, ForeignKey, DateTime, JSON, Text, UniqueConstraint, Table, Date, text
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -458,13 +458,35 @@ class Booking(Base, TimestampMixin):
 class ShiftRoute(Base):
     __tablename__ = "shift_routes"
 
-    id = Column(Integer, primary_key=True, index=True)
-    shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=False)
+    id = Column(Integer, primary_key=True)
+    shift_id = Column(Integer, ForeignKey("shifts.id", ondelete="CASCADE"), nullable=False)
     route_date = Column(Date, nullable=False)
     route_number = Column(Integer, nullable=False)
+    # Canonical snapshot of the route as sent to FE (identical to suggestion payload)
     route_data = Column(JSONB, nullable=False)
-    confirmed = Column(Boolean, default=False)
+    confirmed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint("shift_id", "route_date", "route_number", name="uq_shift_route"),
+        Index("ix_shift_routes_date_shift", "route_date", "shift_id"),
+    )
+
     shift = relationship("Shift", back_populates="shift_routes")
+    stops = relationship("ShiftRouteStop", back_populates="route", cascade="all, delete-orphan")
+
+class ShiftRouteStop(Base):
+    __tablename__ = "shift_route_stops"
+
+    id = Column(Integer, primary_key=True)
+    shift_route_id = Column(Integer, ForeignKey("shift_routes.id", ondelete="CASCADE"), nullable=False)
+    position = Column(Integer, nullable=False)           # 1-based order after optimization
+    booking_id = Column(String, nullable=False)
+    employee_name = Column(String)
+    pickup_lat = Column(Float, nullable=False)
+    pickup_lng = Column(Float, nullable=False)
+    pickup_address = Column(Text)
+    landmark = Column(Text)
+
+    route = relationship("ShiftRoute", back_populates="stops")
