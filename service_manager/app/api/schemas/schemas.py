@@ -846,3 +846,15 @@ class ConfirmRouteRequest(BaseModel):
     shift_id: int
     date: date
     routes: List[ConfirmRouteItem]
+
+class UpdateRouteItem(BaseModel):
+    route_number: int
+    booking_ids: List[int]
+    drop_lat: Optional[float] = None
+    drop_lng: Optional[float] = None
+    drop_address: Optional[str] = None
+
+class UpdateRouteRequest(BaseModel):
+    shift_id: int
+    date: str  # "YYYY-MM-DD"
+    routes: List[UpdateRouteItem]
