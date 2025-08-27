@@ -137,7 +137,7 @@ async def create_driver(
     mobile_number: str = Form(...),
 
     city: str = Form(...),
-    date_of_birth: str = Form(...),
+    date_of_birth: date = Form(...),
     gender: str = Form(...),
 
     alternate_mobile_number: str = Form(...),
@@ -145,27 +145,27 @@ async def create_driver(
     current_address: str = Form(...),
 
     bgv_status: str = Form(...),
-    bgv_date: str = Form(...),
+    bgv_date: date = Form(...),
 
     police_verification_status: str = Form(...),
-    police_verification_date: str = Form(...),
+    police_verification_date: date = Form(...),
 
     medical_verification_status: str = Form(...),
-    medical_verification_date: str = Form(...),
+    medical_verification_date: date = Form(...),
 
     training_verification_status: str = Form(...),
-    training_verification_date: str = Form(...),
+    training_verification_date: date = Form(...),
 
     eye_test_verification_status: str = Form(...),
-    eye_test_verification_date: str = Form(...),
+    eye_test_verification_date: date = Form(...),
 
     license_number: str = Form(...),
-    license_expiry_date: str = Form(...),
+    license_expiry_date: date = Form(...),
 
-    induction_date: str = Form(...),
+    induction_date: date = Form(...),
 
     badge_number: str = Form(...),
-    badge_expiry_date: str = Form(...),
+    badge_expiry_date: date = Form(...),
 
     alternate_govt_id: str = Form(...),
     alternate_govt_id_doc_type: str = Form(...),
@@ -410,44 +410,44 @@ async def update_driver(
     # form_data: DriverUpdate = Depends(),  # reuse schema, all fields should be Optional
     driver_id: int,
     vendor_id: int,
-    name: Optional[str] = Form(...),
-    email: Optional[EmailStr] = Form(...),
-    hashed_password: Optional[str] = Form(...),
-    mobile_number: Optional[str] = Form(...),
+    name: Optional[str] = Form(None),
+    email: Optional[EmailStr] = Form(None),
+    hashed_password: Optional[str] = Form(None),
+    mobile_number: Optional[str] = Form(None),
 
-    city: Optional[str] = Form(...),
-    date_of_birth: Optional[date] = Form(...),
-    gender: Optional[str] = Form(...),
+    city: Optional[str] = Form(None),
+    date_of_birth: Optional[date] = Form(None),
+    gender: Optional[str] = Form(None),
 
-    alternate_mobile_number: Optional[str] = Form(...),
-    permanent_address: Optional[str] = Form(...),
-    current_address: Optional[str] = Form(...),
+    alternate_mobile_number: Optional[str] = Form(None),
+    permanent_address: Optional[str] = Form(None),
+    current_address: Optional[str] = Form(None),
 
-    bgv_status: Optional[str] = Form(...),
-    bgv_date: Optional[date] = Form(...),
+    bgv_status: Optional[str] = Form(None),
+    bgv_date: Optional[date] = Form(None),
 
-    police_verification_status: Optional[str] = Form(...),
-    police_verification_date: Optional[date] = Form(...),
+    police_verification_status: Optional[str] = Form(None),
+    police_verification_date: Optional[date] = Form(None),
 
-    medical_verification_status: Optional[str] = Form(...),
-    medical_verification_date: Optional[date] = Form(...),
+    medical_verification_status: Optional[str] = Form(None),
+    medical_verification_date: Optional[date] = Form(None),
 
-    training_verification_status: Optional[str] = Form(...),
-    training_verification_date: Optional[date] = Form(...),
+    training_verification_status: Optional[str] = Form(None),
+    training_verification_date: Optional[date] = Form(None),
 
-    eye_test_verification_status: Optional[str] = Form(...),
-    eye_test_verification_date: Optional[date] = Form(...),
+    eye_test_verification_status: Optional[str] = Form(None),
+    eye_test_verification_date: Optional[date] = Form(None),
 
-    license_number: Optional[str] = Form(...),
-    license_expiry_date: Optional[date] = Form(...),
+    license_number: Optional[str] = Form(None),
+    license_expiry_date: Optional[date] = Form(None),
 
-    induction_date: Optional[date] = Form(...),
+    induction_date: Optional[date] = Form(None),
 
-    badge_number: Optional[str] = Form(...),
-    badge_expiry_date: Optional[date] = Form(...),
+    badge_number: Optional[str] = Form(None),
+    badge_expiry_date: Optional[date] = Form(None),
 
-    alternate_govt_id: Optional[str] = Form(...),
-    alternate_govt_id_doc_type: Optional[str] = Form(...),
+    alternate_govt_id: Optional[str] = Form(None),
+    alternate_govt_id_doc_type: Optional[str] = Form(None),
 
     bgv_doc_file: Optional[UploadFile] = None,
     police_verification_doc_file: Optional[UploadFile] = None,
@@ -465,81 +465,59 @@ async def update_driver(
     try:
         logger.info(f"[DRIVER_UPDATE] Attempting update: driver_id={driver_id}, vendor_id={vendor_id}")
 
-        # ✅ Ensure driver belongs to this vendor
-        driver = (
-            db.query(Driver)
-            .filter(Driver.driver_id == driver_id, Driver.vendor_id == vendor_id)
-            .first()
-        )
+        # Ensure driver belongs to this vendor
+        driver = db.query(Driver).filter(
+            Driver.driver_id == driver_id,
+            Driver.vendor_id == vendor_id
+        ).first()
 
         if not driver:
-            logger.warning(f"Driver ID {driver_id} not found for Vendor ID {vendor_id}")
             raise HTTPException(status_code=404, detail="Driver not found for this vendor")
-        logger.info(f"[DRIVER_UPDATE] Attempt for driver_id={driver_id}")
-        driver = db.query(Driver).filter_by(driver_id=driver_id).first()
-        if not driver:
-            raise HTTPException(status_code=404, detail="Driver not found.")
 
-        # Check for unique email
+        # Uniqueness checks
         if email and email != driver.email:
             existing_email = db.query(Driver).filter(Driver.email == email).first()
-            if existing_email and existing_email.driver_id != driver.driver_id:
+            if existing_email:
                 raise HTTPException(status_code=409, detail="Email already exists.")
 
-        # Check for unique mobile number
         if mobile_number and mobile_number != driver.mobile_number:
             existing_mobile = db.query(Driver).filter(Driver.mobile_number == mobile_number).first()
-            if existing_mobile and existing_mobile.driver_id != driver.driver_id:
+            if existing_mobile:
                 raise HTTPException(status_code=409, detail="Mobile number already exists.")
 
+        # Handle password
         if hashed_password:
             driver.hashed_password = hash_password(hashed_password)
 
-        # Validate and save each file (if provided)
-        # Upload files
-        async def process_file(doc_file, doc_type, allowed_types ,driver_code=None):
+        # File handler
+        async def process_file(doc_file, doc_type, allowed_types):
             if doc_file:
                 validated = await file_size_validator(doc_file, allowed_types=allowed_types)
-                return  save_file(doc_file, vendor_id, driver_code, doc_type)
+                doc_file.file.seek(0)  # ensure stream reset
+                file_url = save_file(doc_file, vendor_id, driver.driver_code, doc_type)
+                logger.info(f"{doc_type} document updated at: {file_url}")
+                return file_url
             return None
-        # bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"])
-        bgv_doc_url = await process_file(bgv_doc_file, "bgv", ["application/pdf"], driver.driver_code)
-        if bgv_doc_url:
-            logger.info(f"BGV document updated at: {bgv_doc_url}")
-        police_verification_doc_file_url = await process_file(police_verification_doc_file, "police_verification", ["application/pdf"], driver.driver_code)
-        if police_verification_doc_file_url:
-            logger.info(f"Police verification document updated at: {police_verification_doc_file_url}")
-        medical_verification_doc_file_url = await process_file(medical_verification_doc_file, "medical_verification", ["application/pdf"], driver.driver_code)
-        if medical_verification_doc_file_url:
-            logger.info(f"Medical verification document updated at: {medical_verification_doc_file_url}")
-        training_verification_doc_file_url = await process_file(training_verification_doc_file, "training_verification", ["application/pdf"], driver.driver_code)
-        if training_verification_doc_file_url:
-            logger.info(f"Training verification document updated at: {training_verification_doc_file_url}")
-        eye_test_verification_doc_file_url = await process_file(eye_test_verification_doc_file, "eye_test_verification", ["application/pdf"], driver.driver_code)
-        if eye_test_verification_doc_file_url:
-            logger.info(f"Eye test verification document updated at: {eye_test_verification_doc_file_url}")
-        license_doc_file_url = await process_file(license_doc_file, "license", ["application/pdf"], driver.driver_code)
-        if license_doc_file_url:
-            logger.info(f"License document updated at: {license_doc_file_url}")
-        induction_doc_file_url = await process_file(induction_doc_file, "induction", ["application/pdf"], driver.driver_code)
-        if induction_doc_file_url:
-            logger.info(f"Induction document updated at: {induction_doc_file_url}")
-        badge_doc_file_url = await process_file(badge_doc_file, "badge", ["application/pdf"], driver.driver_code)
-        if badge_doc_file_url:
-            logger.info(f"Badge document updated at: {badge_doc_file_url}")
-        alternate_govt_id_doc_file_url = await process_file(alternate_govt_id_doc_file, "alternate_govt_id", ["application/pdf"], driver.driver_code)
-        if alternate_govt_id_doc_file_url:
-            logger.info(f"Alternate government ID document updated at: {alternate_govt_id_doc_file_url}")
-        photo_image_url = await process_file(photo_image, "photo", ["image/jpeg", "image/jpg", "image/png"], driver.driver_code)
-        if photo_image_url:
-            logger.info(f"Photo image updated at: {photo_image_url}")
 
-        # Update fields only if provided
+        # Save files if provided
+        file_updates = {
+            "bgv_doc_url": await process_file(bgv_doc_file, "bgv", ["application/pdf"]),
+            "police_verification_doc_url": await process_file(police_verification_doc_file, "police_verification", ["application/pdf"]),
+            "medical_verification_doc_url": await process_file(medical_verification_doc_file, "medical_verification", ["application/pdf"]),
+            "training_verification_doc_url": await process_file(training_verification_doc_file, "training_verification", ["application/pdf"]),
+            "eye_test_verification_doc_url": await process_file(eye_test_verification_doc_file, "eye_test_verification", ["application/pdf"]),
+            "license_doc_url": await process_file(license_doc_file, "license", ["application/pdf"]),
+            "induction_doc_url": await process_file(induction_doc_file, "induction", ["application/pdf"]),
+            "badge_doc_url": await process_file(badge_doc_file, "badge", ["application/pdf"]),
+            "alternate_govt_id_doc_url": await process_file(alternate_govt_id_doc_file, "alternate_govt_id", ["application/pdf"]),
+            "photo_url": await process_file(photo_image, "photo", ["image/jpeg", "image/jpg", "image/png"]),
+        }
+
+        # Update normal fields
         update_fields = {
             "name": name,
             "email": email,
             "mobile_number": mobile_number,
-            "hashed_password": hashed_password,
             "alternate_mobile_number": alternate_mobile_number,
             "city": city,
             "date_of_birth": date_of_birth,
@@ -562,34 +540,29 @@ async def update_driver(
             "badge_number": badge_number,
             "badge_expiry_date": badge_expiry_date,
             "alternate_govt_id": alternate_govt_id,
-            "alternate_govt_id_doc_type": alternate_govt_id_doc_type
+            "alternate_govt_id_doc_type": alternate_govt_id_doc_type,
         }
 
-        # Set non-empty form fields
         for field, value in update_fields.items():
             if value is not None:
                 setattr(driver, field, value)
 
-        # Set uploaded file URLs
-        if bgv_doc_url: driver.bgv_doc_url = bgv_doc_url
-        if police_verification_doc_file_url: driver.police_verification_doc_url = police_verification_doc_file_url
-        if medical_verification_doc_file_url: driver.medical_verification_doc_url = medical_verification_doc_file_url
-        if training_verification_doc_file_url: driver.training_verification_doc_url = training_verification_doc_file_url
-        if eye_test_verification_doc_file_url: driver.eye_test_verification_doc_url = eye_test_verification_doc_file_url
-        if license_doc_file_url: driver.license_doc_url = license_doc_file_url
-        if induction_doc_file_url: driver.induction_doc_url = induction_doc_file_url
-        if badge_doc_file_url: driver.badge_doc_url = badge_doc_file_url
-        if alternate_govt_id_doc_file_url: driver.alternate_govt_id_doc_url = alternate_govt_id_doc_file_url
-        if photo_image_url: driver.photo_url = photo_image_url
+        # Apply file URL updates
+        for field, value in file_updates.items():
+            if value:
+                setattr(driver, field, value)
 
         db.commit()
         db.refresh(driver)
         logger.info(f"Driver updated successfully: driver_id={driver.driver_id}, email={driver.email}")
         return DriverOut.model_validate(driver, from_attributes=True)
 
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"IntegrityError: {str(e.orig)}")
+        raise HTTPException(status_code=400, detail="Integrity error while updating driver.")
     except HTTPException as e:
         db.rollback()
-        logger.warning(f"HTTPException: {e.detail}")
         raise e
     except Exception as e:
         db.rollback()
