@@ -1285,31 +1285,50 @@ def get_employee(db: Session, employee_code, tenant_id):
         logger.error(f"Exception while fetching employee: {str(e)}")
         raise HTTPException(status_code=500, detail="Error during query execution")
 
-def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
+def get_employee_by_department(db: Session, department_id: int, tenant_id: int,
+                               is_active: Optional[bool], page: int, page_size: int):
     try:
-        logger.info(f"Fetching employees for department_id: {department_id} under tenant_id: {tenant_id}")
+        logger.info(f"Fetching employees for department_id={department_id}, tenant_id={tenant_id}, "
+                    f"is_active={is_active}, page={page}, page_size={page_size}")
 
-        # Fetch department
-        department = db.query(Department).filter_by(department_id=department_id, tenant_id=tenant_id).first()
+        # Validate department
+        department = db.query(Department).filter_by(
+            department_id=department_id,
+            tenant_id=tenant_id
+        ).first()
         if not department:
             logger.warning(f"Department {department_id} not found for tenant {tenant_id}")
             raise HTTPException(status_code=404, detail="Department not found.")
 
-        # Fetch employees
-        employees = db.query(Employee).filter(
+        # Base query
+        query = db.query(Employee).filter(
             Employee.department_id == department_id,
             Employee.tenant_id == tenant_id
-        ).all()
+        )
+
+        # Apply is_active filter if provided
+        if is_active is not None:
+            query = query.filter(Employee.is_active == is_active)
+
+        # Count before pagination
+        total_count = query.count()
+
+        # Apply pagination
+        employees = (
+            query.order_by(Employee.employee_id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
 
         if not employees:
-            logger.warning(f"No employees found for department {department_id} and tenant {tenant_id}")
+            logger.warning(f"No employees found for department {department_id}, tenant {tenant_id}, "
+                           f"is_active={is_active}")
             raise HTTPException(status_code=404, detail="No employees found for this department.")
 
-        logger.info(f"Found {len(employees)} employees for department {department_id} under tenant {tenant_id}")
-
-        employee_list = []
-        for emp in employees:
-            employee_list.append({
+        # Build response list
+        employee_list = [
+            {
                 "employee_id": emp.employee_id,
                 "employee_code": emp.employee_code,
                 "name": emp.name,
@@ -1328,14 +1347,19 @@ def get_employee_by_department(db: Session, department_id: int, tenant_id: int):
                 "longitude": emp.longitude,
                 "landmark": emp.landmark,
                 "department_name": department.department_name,
-                "department_id": department_id
-            })
+                "department_id": department_id,
+                "is_active": emp.is_active
+            }
+            for emp in employees
+        ]
 
         return {
             "department_id": department_id,
             "department_name": department.department_name,
             "tenant_id": tenant_id,
-            "total_employees": len(employee_list),
+            "total_employees": total_count,
+            "page": page,
+            "page_size": page_size,
             "employees": employee_list
         }
 

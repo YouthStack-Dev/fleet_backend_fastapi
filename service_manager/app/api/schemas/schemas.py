@@ -194,6 +194,7 @@ class EmployeeResponse(BaseModel):
     latitude: Optional[str] = None
     longitude: Optional[str] = None
     landmark: Optional[str] = None
+    is_active: Optional[bool] = None
     department_name: Optional[str] = None
     department_id: Optional[int] = None
 class EmployeesByDepartmentResponse(BaseModel):

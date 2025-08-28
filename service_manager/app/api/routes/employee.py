@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse
@@ -23,14 +24,24 @@ def bulk_create_employee(
     token_data: dict = Depends(PermissionChecker(["employee_management.create"]))
 ):
     return controller.controller_bulk_create_employees(file, db, token_data["tenant_id"])
-
 @router.get("/department/{department_id}", response_model=EmployeesByDepartmentResponse)
 async def get_employee(
-    department_id: str,
+    department_id: int,
+    is_active: Optional[bool] = Query(None, description="Filter employees by active status"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.read"]))
 ):
-    return controller.get_employee_by_department(department_id, db, token_data["tenant_id"])
+    return controller.get_employee_by_department(
+        department_id=department_id,
+        db=db,
+        tenant_id=token_data["tenant_id"],
+        is_active=is_active,
+        page=page,
+        page_size=page_size,
+    )
+
 @router.get("/tenant", response_model=EmployeesByTenantResponse)
 async def get_employee(
     db: Session = Depends(get_db),
