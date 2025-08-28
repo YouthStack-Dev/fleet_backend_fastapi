@@ -12,10 +12,8 @@ on:
         default: "main"
 
 env:
-  AWS_REGION: ap-south-1
-  REPO_NAME: fleet
+  IMAGE_NAME: dheerajkumarp/fleet_service_manager
   IMAGE_TAG: latest
-  STACK_NAME: fleet-service_manager
 
 jobs:
   build-and-deploy:
@@ -27,19 +25,6 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch || github.ref_name }}
 
-      - name: Set environment based on branch
-        id: set_env
-        run: |
-          BRANCH="${{ github.event.inputs.branch || github.ref_name }}"
-          if [ "$BRANCH" = "main" ]; then
-            echo "env=prod" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH" == dev-* ]]; then
-            echo "env=dev" >> $GITHUB_OUTPUT
-          else
-            echo "Invalid branch: $BRANCH"
-            exit 1
-          fi
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -49,9 +34,9 @@ jobs:
       - name: Build & push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./service_manager
+          context: ./service_manager   # Make sure your Dockerfile is inside ./service_manager
           push: true
-          tags: dheerajkumarp/fleet_service_manager:latest
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
       - name: Copy docker-compose file to VPS
         uses: appleboy/scp-action@v0.1.4
@@ -69,6 +54,8 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           script: |
+            set -e
+
             echo "${{ secrets.FIREBASE_KEY_JSON }}" | base64 -d > ~/firebase_key.json
             cat <<EOF > ~/service.env
             FIREBASE_KEY_PATH=/app/secrets/firebase_key.json
@@ -79,20 +66,19 @@ jobs:
             X_INTROSPECT_SECRET=${{ secrets.X_INTROSPECT_SECRET }}
             EOF
 
-            # Stop old containers & clean up
-            docker compose -f ~/docker-compose_prod.yaml down --volumes --remove-orphans
-            docker image rm dheerajkumarp/fleet_service_manager:latest || true
+            # Stop old containers & remove orphans
+            docker compose -f ~/docker-compose_prod.yaml down --volumes --remove-orphans || true
 
-            # Pull latest image
-            docker pull dheerajkumarp/fleet_service_manager:latest
+            # Always pull the freshly built image
+            docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-            # Run DB migrations before starting app
+            # Run DB migrations with the new image
             docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
 
             # Start new version
             docker compose -f ~/docker-compose_prod.yaml up -d --force-recreate
 
-            # Optional cleanup
+            # Optional cleanup (safe prune)
             docker image prune -f
             docker volume prune -f
             docker network prune -f
