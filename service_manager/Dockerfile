@@ -44,5 +44,5 @@ EXPOSE 8100
 #   CMD curl -f http://localhost:8100/health || exit 1
 
 # Start FastAPI app with Uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
+CMD ["uvicorn", "service_manager.app.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
 

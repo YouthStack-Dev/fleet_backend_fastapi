@@ -79,20 +79,18 @@ jobs:
             X_INTROSPECT_SECRET=${{ secrets.X_INTROSPECT_SECRET }}
             EOF
 
-            # Stop old containers & clean up
+            # Cleanup old resources
             docker compose -f ~/docker-compose_prod.yaml down --volumes --remove-orphans
-            docker image rm dheerajkumarp/fleet_service_manager:latest || true
+            docker image prune -af
+            docker volume prune -f
+            docker network prune -f
 
             # Pull latest image
             docker pull dheerajkumarp/fleet_service_manager:latest
 
-            # Run DB migrations before starting app
+            # # Run migrations before starting app
             docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
 
-            # Start new version
+            # Deploy new version
             docker compose -f ~/docker-compose_prod.yaml up -d --force-recreate
-
-            # Optional cleanup
-            docker image prune -f
-            docker volume prune -f
-            docker network prune -f
+            docker system prune -af
