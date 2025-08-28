@@ -76,7 +76,6 @@ jobs:
             docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
 
             # Start ONLY service_manager container
-            docker compose -f ~/docker-compose_prod.yaml up -d --force-recreate service_manager
-
+            docker compose -f ~/docker-compose_prod.yaml run --rm service_manager alembic upgrade head
             # Optional cleanup (safe prune)
             docker image prune -f
