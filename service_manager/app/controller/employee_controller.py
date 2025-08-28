@@ -38,13 +38,21 @@ class EmployeeController:
             logger.error(f"Unhandled exception in controller: {str(e)}")
             raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching employee.")
 
-    def get_employee_by_department(self, department_id, db, tenant_id):
+    def get_employee_by_department(self, department_id, db, tenant_id, is_active, page, page_size):
         try:
-            return get_employee_by_department(db, department_id, tenant_id)
+            return get_employee_by_department(
+                db=db,
+                department_id=department_id,
+                tenant_id=tenant_id,
+                is_active=is_active,
+                page=page,
+                page_size=page_size
+            )
         except HTTPException as e:
             raise e
         except Exception:
-            raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching employee.")
+            raise HTTPException(status_code=500, detail="Unexpected error occurred while fetching employees.")
+
     def get_employee_by_tenant(self, db, tenant_id, page, limit):
         try:
             return get_employee_by_tenant(db, tenant_id, page, limit)
