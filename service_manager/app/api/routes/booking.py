@@ -1325,12 +1325,10 @@ def assign_vendor_to_routes(
     logger.info(f"[{request_id}] Assigning vendor for shift_id={payload.shift_id}, date={payload.date}")
 
     try:
-        # Validate vendor
-        for route in payload.routes:
-            vendor = db.query(Vendor).filter(Vendor.vendor_id == route.vendor_id).first()
+        vendor = db.query(Vendor).filter(Vendor.id == payload.vendor_id).first()
         if not vendor:
+            logger.warning(f"[{request_id}] Vendor {payload.vendor_id} not found")
             raise HTTPException(status_code=404, detail="Vendor not found")
-
         # Validate shift & tenant
         shift = db.query(Shift).filter(
             Shift.id == payload.shift_id,
@@ -1343,10 +1341,10 @@ def assign_vendor_to_routes(
         if route_date < date.today():
             raise HTTPException(status_code=400, detail="Date cannot be in the past")
 
-        out_routes: List[VendorRouteSuggestion] = []
+        out_routes: List[RouteSuggestion] = []
 
         for item in payload.routes:
-            # Fetch route by route_number
+            # Fetch route by route_number instead of route_id
             route_row = db.query(ShiftRoute).filter(
                 ShiftRoute.shift_id == payload.shift_id,
                 ShiftRoute.route_date == route_date,
@@ -1393,7 +1391,6 @@ def assign_vendor_to_routes(
             out_routes.append(
                 VendorRouteSuggestion(
                     route_number=route_row.route_number,
-                    vendor_id=route_row.vendor_id,
                     booking_ids=[str(s.booking_id) for s in stops],
                     pickups=pickups,
                     estimated_distance_km=route_data.get("estimated_distance_km", 0.0),
@@ -1419,11 +1416,10 @@ def assign_vendor_to_routes(
                 routes=out_routes
             )
         )
-
     except HTTPException as e:
         db.rollback()
         logger.warning(f"[{request_id}] HTTP {e.status_code}: {e.detail}")
-        return VendorRouteSuggestionResponse(
+        return RouteSuggestionResponse(
             status="error",
             code=e.status_code,
             message=str(e.detail),
@@ -1433,17 +1429,17 @@ def assign_vendor_to_routes(
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"[{request_id}] DB Error: {str(e)}")
-        return VendorRouteSuggestionResponse(
+        return RouteSuggestionResponse(
             status="error",
             code=500,
             message="Database error while updating routes",
             meta={"request_id": request_id, "generated_at": datetime.utcnow().isoformat()},
             data=None
         )
-    except Exception as e:
+    except Exception:
         db.rollback()
         logger.exception(f"[{request_id}] Unexpected error")
-        return VendorRouteSuggestionResponse(
+        return RouteSuggestionResponse(
             status="error",
             code=500,
             message="Unexpected error while updating routes",
