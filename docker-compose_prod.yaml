@@ -13,16 +13,11 @@ services:
     image: dheerajkumarp/fleet_service_manager:latest
     container_name: service_manager
     restart: always
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8100
     env_file:
       - ./service.env
-
-    # ✅ All volumes merged into ONE block
     volumes:
       - ./firebase_key.json:/app/secrets/firebase_key.json
       - /var/lib/fleet/uploads:/app/uploaded_files
-      - ./service_manager:/app
-
     environment:
       - DATABASE_URL=postgresql://maintainer:password@gocab.tech:5432/fleet
       - OAUTH2_ENV=prod
@@ -34,11 +29,11 @@ services:
       - USE_REDIS=1
       - TOKEN_EXPIRY_HOURS=1
       - X_INTROSPECT_SECRET=Kjs#idjXw
-
     depends_on:
       - redis_server
     ports:
       - "8100:8100"
+
 
 volumes:
   redis_data:
