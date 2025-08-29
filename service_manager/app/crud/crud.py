@@ -15,6 +15,14 @@ from fastapi import File, HTTPException, UploadFile
 from common_utils.auth.utils import hash_password
 
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 # Tenant CRUD operations
 def create_tenant(db: Session, tenant: TenantCreate):
@@ -1716,6 +1724,33 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
             "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
             "data": {}
         }
+    
+def update_employee_status(self, employee_code: str, status: bool, db: Session, tenant_id: int):
+    try:
+        employee = db.query(Employee).filter_by(
+            employee_code=employee_code,
+            tenant_id=tenant_id
+        ).first()
+
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        employee.is_active = status
+        db.commit()
+        db.refresh(employee)
+
+        logger.info(f"Employee {employee_code} status updated to {status} by tenant {tenant_id}")
+        return EmployeeUpdateStatusResponse(
+            employee_code=employee.employee_code,
+            is_active=employee.is_active
+        )
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update employee status {employee_code}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update employee status")
+
+
 def delete_employee(db: Session, employee_code: str, tenant_id: int):
     try:
         logger.info(f"Delete request received for employee_code: {employee_code} in tenant_id: {tenant_id}")
@@ -1895,13 +1930,6 @@ def delete_shift(db: Session, tenant_id: int, shift_id: int):
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete shift")
 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 from app.database.models import Vendor,Department
 

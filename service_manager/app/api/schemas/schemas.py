@@ -165,6 +165,10 @@ class EmployeeUpdateResponse(BaseModel):
     meta: Meta
     data: Optional[EmployeeData] = None
 
+class EmployeeUpdateStatusResponse(BaseModel):
+    employee_code: str
+    is_active: bool
+
 class EmployeeRead(EmployeeBase):
     employee_code: str
     employee_id: int
