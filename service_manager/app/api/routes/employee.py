@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
@@ -65,16 +65,17 @@ async def get_employee(
 @router.put("/{employee_code}/status", response_model=EmployeeUpdateStatusResponse)
 async def update_employee_status(
     employee_code: str,
-    status: bool,  # true = active, false = inactive
+    payload: EmployeeStatusUpdate,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
 ):
     return controller.update_employee_status(
         employee_code=employee_code,
-        status=status,
+        is_active=payload.is_active,
         db=db,
         tenant_id=token_data["tenant_id"]
     )
+    
 
 @router.put("/{employee_code}", response_model=EmployeeUpdateResponse)
 async def update_employee(
