@@ -164,7 +164,8 @@ class EmployeeUpdateResponse(BaseModel):
     message: str
     meta: Meta
     data: Optional[EmployeeData] = None
-
+class EmployeeStatusUpdate(BaseModel):
+    is_active: bool
 class EmployeeUpdateStatusResponse(BaseModel):
     employee_code: str
     is_active: bool

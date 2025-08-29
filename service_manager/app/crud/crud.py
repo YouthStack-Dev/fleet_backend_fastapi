@@ -1725,7 +1725,7 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
             "data": {}
         }
     
-def update_employee_status(self, employee_code: str, status: bool, db: Session, tenant_id: int):
+def update_employee_status(self, employee_code: str, is_active: bool, db: Session, tenant_id: int):
     try:
         employee = db.query(Employee).filter_by(
             employee_code=employee_code,
@@ -1735,11 +1735,11 @@ def update_employee_status(self, employee_code: str, status: bool, db: Session, 
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
 
-        employee.is_active = status
+        employee.is_active = is_active
         db.commit()
         db.refresh(employee)
 
-        logger.info(f"Employee {employee_code} status updated to {status} by tenant {tenant_id}")
+        logger.info(f"Employee {employee_code} status updated to {is_active} by tenant {tenant_id}")
         return EmployeeUpdateStatusResponse(
             employee_code=employee.employee_code,
             is_active=employee.is_active
