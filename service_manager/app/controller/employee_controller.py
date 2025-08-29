@@ -1,7 +1,8 @@
 from fastapi import HTTPException
-from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees,get_employee_by_tenant
+from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees,get_employee_by_tenant, update_employee_status
 import traceback
 import logging
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,7 +69,14 @@ class EmployeeController:
             raise e
         except Exception:
             raise HTTPException(status_code=500, detail="Unexpected error occurred while updating employee.")
-
+    def update_employee_status(self, employee_code, status_update, db, tenant_id):
+        try:
+            return update_employee_status(db, employee_code, status_update, tenant_id)
+        except HTTPException as e:
+            raise e
+        except Exception:
+            raise HTTPException(status_code=500, detail="Unexpected error occurred while updating employee status.")
+        
     def delete_employee(self, employee_code, db, tenant_id):
         try:
             return delete_employee(db, employee_code, tenant_id)
