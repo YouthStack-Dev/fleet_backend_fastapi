@@ -1,12 +1,15 @@
 from typing import Optional
+from uuid import uuid4
 from venv import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from app.database.models import Employee
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse, Meta, EmployeeUpdate
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
+
+from app.utils.response import build_response
 
 router = APIRouter()
 
@@ -97,47 +100,87 @@ async def delete_employee(
 ):
     return controller.delete_employee(employee_code, db, token_data["tenant_id"])
 
+# working fine
+# @router.patch("/status/{employee_id}", response_model=EmployeeUpdateResponse)
+# def toggle_employee_status(
+#     employee_id: int,
+#     db: Session = Depends(get_db),
+#     token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
+# ):
+#     try:
+#         employee = (
+#             db.query(Employee)
+#             .filter(Employee.employee_id == employee_id)
+#             .first()
+#         )
 
-@router.patch("/employees/{employee_id}/status", response_model=EmployeeUpdateResponse)
+#         if not employee:
+#             logger.warning(f"Employee ID {employee_id} not found")
+#             raise HTTPException(status_code=404, detail="Employee not found")
+
+#         # ✅ Tenant check
+#         if employee.tenant_id != token_data["tenant_id"]:
+#             logger.warning(
+#                 f"Tenant mismatch: user_tenant={token_data['tenant_id']} "
+#                 f"employee_tenant={employee.tenant_id}"
+#             )
+#             raise HTTPException(status_code=403, detail="Not authorized for this employee")
+
+#         # Toggle status
+#         employee.is_active = not employee.is_active
+#         db.commit()
+#         db.refresh(employee)
+
+#         status_text = "activated" if employee.is_active else "deactivated"
+#         logger.info(f"Employee {employee_id} successfully {status_text} (tenant={employee.tenant_id})")
+
+#         # ✅ Wrap response
+#         return EmployeeUpdateResponse(
+#             status="success",
+#             code=200,
+#             message=f"Employee {status_text} successfully",
+#             meta=Meta(request_id=str(uuid4())),  # or whatever your Meta needs
+#             data=EmployeeUpdate.model_validate(employee, from_attributes=True)
+#         )
+
+#     except HTTPException as http_exc:
+#         raise http_exc
+#     except Exception as e:
+#         logger.exception(f"Error toggling status: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+from app.utils.decorators import handle_exceptions
+from fastapi import Depends
+from uuid import uuid4
+@router.patch("/status/{employee_id}", response_model=EmployeeUpdateResponse)
+@handle_exceptions
 def toggle_employee_status(
     employee_id: int,
     db: Session = Depends(get_db),
     token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
 ):
-    try:
-        employee = (
-            db.query(Employee)
-            .filter(Employee.employee_id == employee_id)
-            .first()
-        )
+    # Only business logic here
+    employee = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
 
-        if not employee:
-            logger.warning(f"Employee ID {employee_id} not found")
-            raise HTTPException(status_code=404, detail="Employee not found")
+    if employee.tenant_id != token_data["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized for this employee")
 
-        # ✅ Tenant check
-        if employee.tenant_id != token_data["tenant_id"]:
-            logger.warning(
-                f"Tenant mismatch: user_tenant={token_data['tenant_id']} "
-                f"employee_tenant={employee.tenant_id}"
-            )
-            raise HTTPException(status_code=403, detail="Not authorized for this employee")
+    # Toggle status
+    employee.is_active = not employee.is_active
+    db.commit()
+    db.refresh(employee)
 
-        # Toggle status
-        employee.is_active = not employee.is_active
-        db.commit()
-        db.refresh(employee)
+    status_text = "activated" if employee.is_active else "deactivated"
+    logger.info(f"Employee {employee_id} successfully {status_text} (tenant={employee.tenant_id})")
 
-        status = "activated" if employee.is_active else "deactivated"
-        logger.info(f"Employee {employee_id} successfully {status} (tenant={employee.tenant_id})")
-        return employee
-
-    except HTTPException as http_exc:
-        raise http_exc
-
-    except Exception as e:
-        logger.exception(f"Error toggling status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return build_response(
+        data=EmployeeUpdate.model_validate(employee, from_attributes=True),
+        message=f"Employee {status_text} successfully",
+        code=200,
+        status="success"
+    )
 
 
 
