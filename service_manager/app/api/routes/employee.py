@@ -4,7 +4,7 @@ from venv import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from app.database.models import Employee
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse, Meta, EmployeeUpdate
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse, Meta, EmployeeUpdate, StatusUpdate
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
@@ -67,19 +67,7 @@ async def get_employee(
     print(f"🔵 employee_code: {employee_code}, tenant_id: {token_data['tenant_id']}")
     return controller.get_employee(employee_code, db, token_data["tenant_id"])
 
-@router.put("/{employee_code}/status", response_model=EmployeeUpdateStatusResponse)
-async def update_employee_status(
-    employee_code: str,
-    payload: EmployeeStatusUpdate,
-    db: Session = Depends(get_db),
-    token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
-):
-    return controller.update_employee_status(
-        employee_code=employee_code,
-        is_active=payload.is_active,
-        db=db,
-        tenant_id=token_data["tenant_id"]
-    )
+
     
 
 @router.put("/{employee_code}", response_model=EmployeeUpdateResponse)
@@ -100,54 +88,6 @@ async def delete_employee(
 ):
     return controller.delete_employee(employee_code, db, token_data["tenant_id"])
 
-# working fine
-# @router.patch("/status/{employee_id}", response_model=EmployeeUpdateResponse)
-# def toggle_employee_status(
-#     employee_id: int,
-#     db: Session = Depends(get_db),
-#     token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
-# ):
-#     try:
-#         employee = (
-#             db.query(Employee)
-#             .filter(Employee.employee_id == employee_id)
-#             .first()
-#         )
-
-#         if not employee:
-#             logger.warning(f"Employee ID {employee_id} not found")
-#             raise HTTPException(status_code=404, detail="Employee not found")
-
-#         # ✅ Tenant check
-#         if employee.tenant_id != token_data["tenant_id"]:
-#             logger.warning(
-#                 f"Tenant mismatch: user_tenant={token_data['tenant_id']} "
-#                 f"employee_tenant={employee.tenant_id}"
-#             )
-#             raise HTTPException(status_code=403, detail="Not authorized for this employee")
-
-#         # Toggle status
-#         employee.is_active = not employee.is_active
-#         db.commit()
-#         db.refresh(employee)
-
-#         status_text = "activated" if employee.is_active else "deactivated"
-#         logger.info(f"Employee {employee_id} successfully {status_text} (tenant={employee.tenant_id})")
-
-#         # ✅ Wrap response
-#         return EmployeeUpdateResponse(
-#             status="success",
-#             code=200,
-#             message=f"Employee {status_text} successfully",
-#             meta=Meta(request_id=str(uuid4())),  # or whatever your Meta needs
-#             data=EmployeeUpdate.model_validate(employee, from_attributes=True)
-#         )
-
-#     except HTTPException as http_exc:
-#         raise http_exc
-#     except Exception as e:
-#         logger.exception(f"Error toggling status: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 from app.utils.decorators import handle_exceptions
 from fastapi import Depends
@@ -184,37 +124,41 @@ def toggle_employee_status(
 
 
 
-# @router.put("/{vendor_id}/drivers/{driver_id}/status", response_model=DriverOut)
-# def update_driver_status(
-#     vendor_id: int,
-#     driver_id: int,
-#     status: StatusUpdate,
-#     db: Session = Depends(get_db),
-#     token_data: dict = Depends(PermissionChecker(["driver_management.update"]))
-# ):
-#     try:
-#         driver = db.query(Driver).filter_by(driver_id=driver_id, vendor_id=vendor_id).first()
-#         if not driver:
-#             logger.warning(f"Driver ID {driver_id} not found for vendor ID {vendor_id}")
-#             raise HTTPException(status_code=404, detail="Driver not found for this vendor")
 
-#         if driver.is_active == status.is_active:
-#             current_state = "active" if status.is_active else "inactive"
-#             logger.info(f"Driver {driver_id} is already {current_state}")
-#             raise HTTPException(status_code=400, detail=f"Driver is already {current_state}")
+@router.put("/status/{employee_id}", response_model=EmployeeUpdateResponse)
+@handle_exceptions
+def update_employee_status(
+    employee_id: int,
+    status: StatusUpdate,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(PermissionChecker(["employee_management.update"]))
+):
+    """
+    Updates the employee status explicitly to the given value.
+    Only business logic here; errors are handled by the decorator.
+    """
+    employee = db.query(Employee).filter_by(employee_id=employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
 
-#         driver.is_active = status.is_active
-#         db.commit()
-#         db.refresh(driver)
+    if employee.tenant_id != token_data["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized for this employee")
 
-#         new_state = "activated" if driver.is_active else "deactivated"
-#         logger.info(f"Driver {driver_id} under vendor {vendor_id} successfully {new_state}")
-#         return driver
+    if employee.is_active == status.is_active:
+        current_state = "active" if status.is_active else "inactive"
+        raise HTTPException(status_code=400, detail=f"Employee is already {current_state}")
 
-#     except HTTPException as http_exc:
-#         raise http_exc  # Allow FastAPI to handle proper HTTPException responses
-    
-#     except Exception as e:
-#         db.rollback()
-#         logger.exception(f"Unexpected error while toggling driver status: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Internal Server Error")
+    # Update status
+    employee.is_active = status.is_active
+    db.commit()
+    db.refresh(employee)
+
+    new_state = "activated" if employee.is_active else "deactivated"
+    logger.info(f"Employee {employee_id} successfully {new_state} (tenant={employee.tenant_id})")
+
+    return build_response(
+        data=EmployeeUpdate.model_validate(employee, from_attributes=True),
+        message=f"Employee {new_state} successfully",
+        code=200,
+        status="success"
+    )

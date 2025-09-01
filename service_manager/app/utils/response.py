@@ -1,4 +1,7 @@
 from uuid import uuid4
+from datetime import datetime
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 def build_response(data=None, message="Success", code=200, status="success"):
     return {
@@ -8,9 +11,7 @@ def build_response(data=None, message="Success", code=200, status="success"):
         "meta": {"request_id": str(uuid4()), "timestamp": datetime.utcnow().isoformat()},
         "data": data if data is not None else None
     }
-from datetime import datetime
-from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
 
 def handle_db_exception(e, request_id: str):
     if isinstance(e, IntegrityError):
