@@ -132,10 +132,14 @@ class EmployeeUpdate(BaseModel):
     longitude: Optional[str] = None
     landmark: Optional[str] = None
     department_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
 
 class Meta(BaseModel):
-    request_id: str
-    timestamp: str
+    request_id: Optional[str] = None
+    timestamp: Optional[str] = None
 
 class EmployeeData(BaseModel):
     employee_code: str
@@ -157,13 +161,16 @@ class EmployeeData(BaseModel):
     latitude: Optional[str]
     longitude: Optional[str]
     landmark: Optional[str]
+    is_active: Optional[bool] = None
+
+    
 
 class EmployeeUpdateResponse(BaseModel):
     status: str
     code: int
     message: str
     meta: Meta
-    data: Optional[EmployeeData] = None
+    data: Optional[EmployeeUpdate] = None
 class EmployeeStatusUpdate(BaseModel):
     is_active: bool
 class EmployeeUpdateStatusResponse(BaseModel):

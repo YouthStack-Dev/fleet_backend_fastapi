@@ -10,6 +10,7 @@ passlib[bcrypt]
 pydantic[email]
 requests
 firebase-admin>=6.5.0
+pytest
 python-dotenv
 pandas
 openpyxl  # Needed for reading Excel files
