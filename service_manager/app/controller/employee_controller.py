@@ -69,13 +69,7 @@ class EmployeeController:
             raise e
         except Exception:
             raise HTTPException(status_code=500, detail="Unexpected error occurred while updating employee.")
-    def update_employee_status(self, employee_code, is_active, db, tenant_id):
-        try:
-            return update_employee_status(db, employee_code, is_active, tenant_id)
-        except HTTPException as e:
-            raise e
-        except Exception:
-            raise HTTPException(status_code=500, detail="Unexpected error occurred while updating employee status.")
+
         
     def delete_employee(self, employee_code, db, tenant_id):
         try:

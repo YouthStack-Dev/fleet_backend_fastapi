@@ -1724,32 +1724,6 @@ def update_employee(db: Session, employee_code: str, employee_update: EmployeeUp
             "meta": {"request_id": request_id, "timestamp": datetime.utcnow().isoformat()},
             "data": {}
         }
-    
-def update_employee_status(self, employee_code: str, is_active: bool, db: Session, tenant_id: int):
-    try:
-        employee = db.query(Employee).filter_by(
-            employee_code=employee_code,
-            tenant_id=tenant_id
-        ).first()
-
-        if not employee:
-            raise HTTPException(status_code=404, detail="Employee not found")
-
-        employee.is_active = is_active
-        db.commit()
-        db.refresh(employee)
-
-        logger.info(f"Employee {employee_code} status updated to {is_active} by tenant {tenant_id}")
-        return EmployeeUpdateStatusResponse(
-            employee_code=employee.employee_code,
-            is_active=employee.is_active
-        )
-
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Failed to update employee status {employee_code}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update employee status")
-
 
 def delete_employee(db: Session, employee_code: str, tenant_id: int):
     try:
