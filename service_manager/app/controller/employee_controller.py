@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees,get_employee_by_tenant, update_employee_status
+from app.crud.crud import create_employee , get_employee as get_employee_service, update_employee, delete_employee , get_employee_by_department , bulk_create_employees,get_employee_by_tenant
 import traceback
 import logging
 

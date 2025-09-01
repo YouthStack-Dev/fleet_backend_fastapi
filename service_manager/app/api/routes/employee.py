@@ -4,7 +4,7 @@ from venv import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from app.database.models import Employee
 from sqlalchemy.orm import Session
-from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse,EmployeeUpdateStatusResponse, Meta, EmployeeUpdate, StatusUpdate
+from app.api.schemas.schemas import EmployeeCreate, EmployeeRead, EmployeeStatusUpdate, EmployeeUpdate ,EmployeeDeleteRead, EmployeeUpdateResponse, EmployeesByDepartmentResponse, EmployeesByTenantResponse, Meta, EmployeeUpdate, StatusUpdate
 from app.controller.employee_controller import EmployeeController
 from app.database.database import get_db
 from common_utils.auth.permission_checker import PermissionChecker
