@@ -1401,110 +1401,139 @@ from app.api.routes import employee, shift
     
 #     finally:
 #         session.close()def seed_iam(session):
-def seed_iam(session):
-    from app.database.models import Tenant, User, Role, Service, Module, Policy
+# app/database/seeds.py
+from app.database.database import SessionLocal
+from app.database.models import Tenant, User, Role, Service, Module, Policy
 
-    # 1. Create Tenant
-    tenant = Tenant(
-        tenant_name="neru network",
-        address="ra celebraty studio",
-        longitude="77.4950427",
-        latitude="13.0632540",
-        tenant_metadata={"industry": "Technology", "size": "Enterprise"},
-    )
-    session.add(tenant)
-    session.flush()
+SERVICES = {
+    "IAM / Organization Management": [
+        "user_management", "department_management", "employee_management",
+        "group_management", "mapping_management", "policy_management",
+        "service_management", "tenant_management"
+    ],
+    "Fleet / Operations Management": [
+        "driver_management", "vehicle_management", "vehicle_type_management",
+        "vendor_management", "routing_management", "tracking_management",
+        "booking_management"
+    ],
+    "Shift Management": [
+        "shift_management", "shift_category", "cutoff"
+    ],
+    "Dashboards": [
+        "admin_dashboard", "company_dashboard"
+    ],
+}
 
-    # 2. Services & Modules
-    SERVICES = {
-        "IAM / Organization Management": [
-            "user_management", "department_management", "employee_management",
-            "group_management", "mapping_management", "policy_management",
-            "service_management", "tenant_management"
-        ],
-        "Fleet / Operations Management": [
-            "driver_management", "vehicle_management", "vehicle_type_management",
-            "vendor_management", "routing_management", "tracking_management",
-            "booking_management"
-        ],
-        "Shift Management": [
-            "shift_management", "shift_category", "cutoff"
-        ],
-        "Dashboards": [
-            "admin_dashboard", "company_dashboard"
-        ],
-    }
+ROLES = {
+    "super_admin": "Full access to all services/modules",
+    "tenant_admin": "Scoped to one tenant, limited modules",
+    "vendor_admin": "Scoped to vendor, driver/vehicle modules only",
+}
 
-    service_objs = {}
-    module_objs = {}
+ROLE_MODULE_ACCESS = {
+    "super_admin": [m for modules in SERVICES.values() for m in modules],  # all modules
+    "tenant_admin": [
+        "user_management", "department_management", "employee_management",
+        "mapping_management",
+        "company_dashboard", "tracking_management", "routing_management",
+        "shift_management", "shift_category", "cutoff",
+    ],
+    "vendor_admin": [
+        "driver_management", "vehicle_management", "vehicle_type_management",
+    ],
+}
 
-    for service_name, modules in SERVICES.items():
-        service = Service(name=service_name, description=f"{service_name} service")
-        session.add(service)
+
+def seed_iam():
+    """Bootstrap IAM data into the database. Safe to run multiple times."""
+    from app.database.models import Tenant, User, Role, Service, Module, Policy, user_role
+    session = SessionLocal()
+
+    try:
+        # Prevent reseeding
+        if session.query(Tenant).filter_by(tenant_name="neru network").first():
+            print("⚠️ IAM already seeded, skipping.")
+            return
+
+        # 1. Tenant
+        tenant = Tenant(
+            tenant_name="neru network",
+            address="ra celebraty studio",
+            longitude="77.4950427",
+            latitude="13.0632540",
+            tenant_metadata={"industry": "Technology", "size": "Enterprise"},
+        )
+        session.add(tenant)
         session.flush()
-        service_objs[service_name] = service
 
-        for module in modules:
-            m = Module(service_id=service.id, name=module, description=f"{module} module")
-            session.add(m)
+        # 2. Services & Modules
+        service_objs, module_objs = {}, {}
+        for service_name, modules in SERVICES.items():
+            service = Service(name=service_name, description=f"{service_name} service")
+            session.add(service)
             session.flush()
-            module_objs[module] = m
+            service_objs[service_name] = service
 
-    # 3. Roles
-    ROLES = {
-        "super_admin": "Full access to all services/modules",
-        "tenant_admin": "Scoped to one tenant, limited modules",
-        "vendor_admin": "Scoped to vendor, driver/vehicle modules only",
-    }
+            for module in modules:
+                m = Module(service_id=service.id, name=module, description=f"{module} module")
+                session.add(m)
+                session.flush()
+                module_objs[module] = m
 
-    role_objs = {}
-    for rname, desc in ROLES.items():
-        r = Role(role_name=rname, description=desc, tenant_id=tenant.tenant_id)
-        session.add(r)
+        # 3. Roles
+        role_objs = {}
+        for rname, desc in ROLES.items():
+            r = Role(role_name=rname, description=desc, tenant_id=tenant.tenant_id)
+            session.add(r)
+            session.flush()
+            role_objs[rname] = r
+
+        # 4. Policies
+        for role_name, modules in ROLE_MODULE_ACCESS.items():
+            for module_name in modules:
+                m = module_objs[module_name]
+                policy = Policy(
+                    tenant_id=tenant.tenant_id,
+                    service_id=m.service_id,
+                    module_id=m.id,
+                    can_view=True,
+                    can_create=True,
+                    can_edit=True,
+                    can_delete=True,
+                    role_id=role_objs[role_name].role_id,
+                    condition={"ip_range": "10.0.0.0/8"},
+                )
+                session.add(policy)
+
+        # 5. Users
+        users = [
+            User(username="superadmin", email="super@system.com",
+                 hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
+                 tenant_id=tenant.tenant_id),
+            User(username="tenantadmin", email="tenant@system.com",
+                 hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
+                 tenant_id=tenant.tenant_id),
+            User(username="vendoradmin", email="vendor@system.com",
+                 hashed_password="a9dc602f9d82bc6720b2b4bb016edcacf7da4b2b453a466b742da743f3cba15d",
+                 tenant_id=tenant.tenant_id),
+        ]
+        session.add_all(users)
         session.flush()
-        role_objs[rname] = r
 
-    # 4. Role → Module Access Map
-    ROLE_MODULE_ACCESS = {
-        "super_admin": list(module_objs.keys()),
-        "tenant_admin": [
-            "user_management", "department_management", "employee_management",
-            "company_dashboard", "tracking_management", "routing_management",
-            "shift_management", "shift_category", "cutoff",
-        ],
-        "vendor_admin": [
-            "driver_management", "vehicle_management", "vehicle_type_management",
-        ],
-    }
+        # 6. User-Role mappings (minimal, required for login/permissions)
+        session.execute(user_role.insert().values(
+            user_id=users[0].user_id, role_id=role_objs["super_admin"].role_id, tenant_id=tenant.tenant_id
+        ))
+        session.execute(user_role.insert().values(
+            user_id=users[1].user_id, role_id=role_objs["tenant_admin"].role_id, tenant_id=tenant.tenant_id
+        ))
+        session.execute(user_role.insert().values(
+            user_id=users[2].user_id, role_id=role_objs["vendor_admin"].role_id, tenant_id=tenant.tenant_id
+        ))
 
-    # 5. Policies (CRUD per module)
-    for role, modules in ROLE_MODULE_ACCESS.items():
-        for module_name in modules:
-            m = module_objs[module_name]
-            policy = Policy(
-                tenant_id=tenant.tenant_id,
-                service_id=m.service_id,
-                module_id=m.id,
-                can_view=True,
-                can_create=True,
-                can_edit=True,
-                can_delete=True,
-                role_id=role_objs[role].role_id,
-                condition={},
-            )
-            session.add(policy)
+        session.commit()
+        print("✅ IAM Bootstrap complete")
 
-    # 6. Admin Users
-    users = [
-        User(username="superadmin", email="super@system.com",
-             hashed_password="<dp_hash>", tenant_id=tenant.tenant_id),
-        User(username="tenantadmin", email="tenant@system.com",
-             hashed_password="<dp_hash>", tenant_id=tenant.tenant_id),
-        User(username="vendoradmin", email="vendor@system.com",
-             hashed_password="<dp_hash>", tenant_id=tenant.tenant_id),
-    ]
-    session.add_all(users)
-    session.flush()
-
-    session.commit()
-    print("✅ IAM Bootstrap complete")
+    except Exception as e:
+        session.rollback()
+        raise
