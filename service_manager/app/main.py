@@ -27,7 +27,7 @@ from app.api.routes.app.employee.auth import router as app_auth_router
 from app.api.routes.app.employee.booking import router as employee_booking_router
 from app.api.routes.booking import router as booking_router
 from contextlib import asynccontextmanager
-from app.database.database import init_db, seed_iam
+from app.database.database import init_db, seed_iam, seed_data
 from fastapi.middleware.cors import CORSMiddleware
  
 @asynccontextmanager
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     init_db()
     
     # seed_iam()
-    # seed_data()
+    seed_data()
     yield
 
 
