@@ -444,3 +444,305 @@ CREATE TABLE bookings (
 	CONSTRAINT bookings_shift_id_fkey FOREIGN KEY (shift_id) REFERENCES shifts(shift_id) ON DELETE CASCADE,
 	CONSTRAINT bookings_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE SET NULL
 );
+
+
+
+from sqlalchemy import (
+    Column, Integer, String, Boolean, Date, DateTime, Enum, Float, Numeric, Time,
+    Text, ForeignKey, UniqueConstraint, func
+)
+from sqlalchemy.orm import relationship
+from app.database.database import Base
+import enum
+
+
+# ---------- ENUMS ----------
+class GenderEnum(enum.Enum):
+    male = "Male"
+    female = "Female"
+    other = "Other"
+
+
+class BookingStatusEnum(enum.Enum):
+    pending = "Pending"
+    confirmed = "Confirmed"
+    ongoing = "Ongoing"
+    completed = "Completed"
+    canceled = "Canceled"
+
+
+class ShiftLogTypeEnum(enum.Enum):
+    in_shift = "IN"
+    out_shift = "OUT"
+
+
+class PickupTypeEnum(enum.Enum):
+    pickup = "Pickup"
+    nodal = "Nodal"
+
+
+class VerificationStatusEnum(enum.Enum):
+    pending = "Pending"
+    approved = "Approved"
+    rejected = "Rejected"
+
+
+# ---------- BASE MIXIN ----------
+class TimestampMixin:
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+# ---------- ADMINS ----------
+class Admin(Base, TimestampMixin):
+    __tablename__ = "admins"
+
+    admin_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    email = Column(String(150), unique=True, nullable=False)
+    phone = Column(String(20), unique=True)
+    password = Column(String(255), nullable=False)  # store hashed password
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+# ---------- SHIFTS ----------
+class Shift(Base, TimestampMixin):
+    __tablename__ = "shifts"
+
+    shift_id = Column(Integer, primary_key=True, index=True)
+    shift_code = Column(String(50), unique=True, nullable=False)
+    log_type = Column(Enum(ShiftLogTypeEnum, native_enum=False), nullable=False)
+    shift_time = Column(Time, nullable=False)
+    pickup_type = Column(Enum(PickupTypeEnum, native_enum=False))
+    gender = Column(Enum(GenderEnum, native_enum=False))
+    waiting_time_minutes = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    bookings = relationship("Booking", back_populates="shift", cascade="all, delete-orphan")
+
+
+# ---------- TEAMS ----------
+class Team(Base, TimestampMixin):
+    __tablename__ = "teams"
+
+    team_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), unique=True, nullable=False)
+    description = Column(Text)
+
+    employees = relationship("Employee", back_populates="team", cascade="all, delete-orphan")
+    bookings = relationship("Booking", back_populates="team", cascade="all, delete-orphan")
+
+
+# ---------- TENANTS ----------
+class Tenant(Base, TimestampMixin):
+    __tablename__ = "tenants"
+
+    tenant_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), unique=True, nullable=False)
+    address = Column(String(255))
+    longitude = Column(Numeric(9, 6))
+    latitude = Column(Numeric(9, 6))
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+# ---------- VENDORS ----------
+class Vendor(Base, TimestampMixin):
+    __tablename__ = "vendors"
+
+    vendor_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    code = Column(String(50), unique=True)
+    email = Column(String(150), unique=True)
+    phone = Column(String(20), unique=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    drivers = relationship("Driver", back_populates="vendor", cascade="all, delete-orphan")
+    vehicle_types = relationship("VehicleType", back_populates="vendor", cascade="all, delete-orphan")
+    vehicles = relationship("Vehicle", back_populates="vendor", cascade="all, delete-orphan")
+    vendor_users = relationship("VendorUser", back_populates="vendor", cascade="all, delete-orphan")
+
+
+# ---------- DRIVERS ----------
+class Driver(Base, TimestampMixin):
+    __tablename__ = "drivers"
+
+    driver_id = Column(Integer, primary_key=True, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(150), nullable=False)
+    code = Column(String(50), nullable=False)
+    email = Column(String(150), unique=True, nullable=False)
+    phone = Column(String(20), unique=True, nullable=False)
+    gender = Column(Enum(GenderEnum, native_enum=False))
+    password = Column(String(255), nullable=False)
+    date_of_joining = Column(Date)
+    date_of_birth = Column(Date)
+    permanent_address = Column(Text)
+    current_address = Column(Text)
+
+    # Verification fields
+    bg_verify_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    bg_verify_date = Column(Date)
+    bg_verify_url = Column(Text)
+
+    police_verify_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    police_verify_date = Column(Date)
+    police_verify_url = Column(Text)
+
+    medical_verify_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    medical_verify_date = Column(Date)
+    medical_verify_url = Column(Text)
+
+    training_verify_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    training_verify_date = Column(Date)
+    training_verify_url = Column(Text)
+
+    eye_verify_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    eye_verify_date = Column(Date)
+    eye_verify_url = Column(Text)
+
+    license_number = Column(String(100))
+    license_expiry_date = Column(Date)
+
+    induction_status = Column(Enum(VerificationStatusEnum, native_enum=False))
+    induction_date = Column(Date)
+    induction_url = Column(Text)
+
+    badge_number = Column(String(100), unique=True)
+    badge_expiry_date = Column(Date)
+    badge_url = Column(Text)
+
+    alt_govt_id_number = Column(String(20))
+    alt_govt_id_type = Column(String(50))
+    alt_govt_id_url = Column(Text)
+
+    photo_url = Column(Text)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    vendor = relationship("Vendor", back_populates="drivers")
+    vehicles = relationship("Vehicle", back_populates="driver", cascade="all, delete-orphan")
+
+
+# ---------- EMPLOYEES ----------
+class Employee(Base, TimestampMixin):
+    __tablename__ = "employees"
+
+    employee_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    employee_code = Column(String(50), unique=True)
+    email = Column(String(150), unique=True, nullable=False)
+    password = Column(String(255), nullable=False)
+    team_id = Column(Integer, ForeignKey("teams.team_id", ondelete="SET NULL"))
+    phone = Column(String(20), unique=True, nullable=False)
+    alternate_phone = Column(String(20))
+    special_needs = Column(Text)
+    special_needs_start_date = Column(Date)
+    special_needs_end_date = Column(Date)
+    address = Column(Text)
+    latitude = Column(Numeric(9, 6))
+    longitude = Column(Numeric(9, 6))
+    gender = Column(Enum(GenderEnum, native_enum=False))
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    team = relationship("Team", back_populates="employees")
+    bookings = relationship("Booking", back_populates="employee", cascade="all, delete-orphan")
+    weekoff_config = relationship("WeekoffConfig", back_populates="employee", uselist=False)
+
+
+# ---------- VEHICLE TYPES ----------
+class VehicleType(Base, TimestampMixin):
+    __tablename__ = "vehicle_types"
+    __table_args__ = (UniqueConstraint("vendor_id", "name", name="vehicle_types_vendor_id_name_key"),)
+
+    vehicle_type_id = Column(Integer, primary_key=True, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    vendor = relationship("Vendor", back_populates="vehicle_types")
+    vehicles = relationship("Vehicle", back_populates="vehicle_type", cascade="all, delete-orphan")
+
+
+# ---------- VEHICLES ----------
+class Vehicle(Base, TimestampMixin):
+    __tablename__ = "vehicles"
+
+    vehicle_id = Column(Integer, primary_key=True, index=True)
+    vehicle_type_id = Column(Integer, ForeignKey("vehicle_types.vehicle_type_id", ondelete="CASCADE"), nullable=False)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+    driver_id = Column(Integer, ForeignKey("drivers.driver_id", ondelete="SET NULL"))
+
+    rc_number = Column(String(100), unique=True, nullable=False)
+    rc_expiry_date = Column(Date)
+    description = Column(Text)
+
+    puc_expiry_date = Column(Date)
+    puc_url = Column(Text)
+    fitness_expiry_date = Column(Date)
+    fitness_url = Column(Text)
+    tax_receipt_date = Column(Date)
+    tax_receipt_url = Column(Text)
+    insurance_expiry_date = Column(Date)
+    insurance_url = Column(Text)
+    permit_expiry_date = Column(Date)
+    permit_url = Column(Text)
+
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    vehicle_type = relationship("VehicleType", back_populates="vehicles")
+    vendor = relationship("Vendor", back_populates="vehicles")
+    driver = relationship("Driver", back_populates="vehicles")
+
+
+# ---------- VENDOR USERS ----------
+class VendorUser(Base, TimestampMixin):
+    __tablename__ = "vendor_users"
+
+    vendor_user_id = Column(Integer, primary_key=True, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.vendor_id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(150), nullable=False)
+    email = Column(String(150), unique=True, nullable=False)
+    phone = Column(String(20), unique=True, nullable=False)
+    password = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    vendor = relationship("Vendor", back_populates="vendor_users")
+
+
+# ---------- WEEKOFF CONFIGS ----------
+class WeekoffConfig(Base, TimestampMixin):
+    __tablename__ = "weekoff_configs"
+
+    weekoff_id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id", ondelete="CASCADE"), unique=True, nullable=False)
+    monday = Column(Boolean, default=False, nullable=False)
+    tuesday = Column(Boolean, default=False, nullable=False)
+    wednesday = Column(Boolean, default=False, nullable=False)
+    thursday = Column(Boolean, default=False, nullable=False)
+    friday = Column(Boolean, default=False, nullable=False)
+    saturday = Column(Boolean, default=False, nullable=False)
+    sunday = Column(Boolean, default=False, nullable=False)
+
+    employee = relationship("Employee", back_populates="weekoff_config")
+
+
+# ---------- BOOKINGS ----------
+class Booking(Base, TimestampMixin):
+    __tablename__ = "bookings"
+
+    booking_id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.employee_id", ondelete="CASCADE"), nullable=False)
+    shift_id = Column(Integer, ForeignKey("shifts.shift_id", ondelete="CASCADE"))
+    booking_date = Column(Date, nullable=False)
+    pickup_latitude = Column(Float)
+    pickup_longitude = Column(Float)
+    pickup_location = Column(String(255))
+    drop_latitude = Column(Float)
+    drop_longitude = Column(Float)
+    drop_location = Column(String(255))
+    status = Column(Enum(BookingStatusEnum, native_enum=False), default=BookingStatusEnum.pending)
+    team_id = Column(Integer, ForeignKey("teams.team_id", ondelete="SET NULL"))
+
+    employee = relationship("Employee", back_populates="bookings")
+    shift = relationship("Shift", back_populates="bookings")
+    team = relationship("Team", back_populates="bookings")
