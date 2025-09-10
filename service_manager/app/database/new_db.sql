@@ -156,6 +156,16 @@ CREATE TABLE shifts (
 	CONSTRAINT shifts_shift_code_key UNIQUE (shift_code)
 );
 
+CREATE TABLE admins ( 
+    admin_id SERIAL PRIMARY KEY, 
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    phone VARCHAR(20) UNIQUE,
+    password VARCHAR(255) NOT NULL,  -- store a bcrypt/argon2 hash, never plaintext
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
 
 -- public.teams definition
 
